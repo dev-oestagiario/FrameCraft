@@ -209,7 +209,7 @@ export function composeProfessionalDesign(
  const titleSize=fitTitle(headline,titleWidth,titleHeight,
    horizontal?Math.min(104,h*.116):Math.min(112,w*.095),horizontal?43:54);
  if(brandLabel)txt(brandLabel,titleX,h*.055,titleWidth,h*.05,
-   horizontal?Math.min(25,h*.036):Math.min(31,w*.031),c.accent,'bold',centerCopy?'center':'left');
+   horizontal?Math.max(28,Math.min(32,h*.048)):Math.min(34,w*.031),c.accent,'bold',centerCopy?'center':'left');
  txt(headline,titleX,titleY,titleWidth,titleHeight,toMax(titleSize),c.ink,'bold',centerCopy?'center':'left');
  if(deck){
   const subtitleY=horizontal?h*.55:h*.296;

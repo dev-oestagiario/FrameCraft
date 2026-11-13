@@ -31,7 +31,8 @@ describe('Fidelidade ao pedido original',()=>{
   expect(printable).toMatch(/PLAYSTATION 5/);
   expect(design.elements.filter(e=>e.type==='path').length).toBeGreaterThanOrEqual(2);
   expect(design.canvas.background).toBe('#000000');
-  expect(designSchema.safeParse(design).success).toBe(true);
+  const validation=designSchema.safeParse(design);
+  expect(validation.success,validation.success?'':JSON.stringify(validation.error.issues)).toBe(true);
   expect(auditProfessionalDesign(design,intent)).toEqual([]);
  });
  it('produz layouts distintos para console e software sem variar aleatoriamente',()=>{
