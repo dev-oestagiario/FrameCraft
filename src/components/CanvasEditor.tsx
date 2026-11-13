@@ -1,5 +1,5 @@
 import {useCallback,useEffect,useRef,useState} from 'react';
-import {Stage,Layer,Rect,Text as KText,Ellipse,Line as KLine,Image as KImage,Transformer} from 'react-konva';
+import {Stage,Layer,Rect,Text as KText,Ellipse,Line as KLine,Path as KPath,Image as KImage,Transformer} from 'react-konva';
 import Konva from 'konva';
 import type {DesignElement, ImageElement, TextElement} from '../lib/schema';
 import {useStudio} from '../store/useStudio';
@@ -81,6 +81,7 @@ export function CanvasEditor({exportRef,zoom}:Props){
   if(el.type==='polygon')return <KLine key={el.id} ref={register} {...common} points={regularPoints(el.width,el.height,el.sides)} closed fill={el.fill} stroke={el.stroke} strokeWidth={el.strokeWidth} lineJoin="round"/>;
   if(el.type==='star')return <KLine key={el.id} ref={register} {...common} points={regularPoints(el.width,el.height,el.points,el.innerRatio)} closed fill={el.fill} stroke={el.stroke} strokeWidth={el.strokeWidth} lineJoin="round"/>;
   if(el.type==='line')return <KLine key={el.id} ref={register} {...common} points={[0,0,el.width,el.height]} stroke={el.fill} strokeWidth={el.strokeWidth} lineCap="round" lineJoin="round"/>;
+  if(el.type==='path')return <KPath key={el.id} ref={register} {...common} data={el.data} fill={el.fill} stroke={el.stroke} strokeWidth={el.strokeWidth} listening/>;
   return <ImageNode key={el.id} element={el} common={common} register={register}/>;
  };
  return <div className="canvas-host" ref={host}>

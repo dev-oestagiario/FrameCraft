@@ -208,3 +208,33 @@ O arquivo `src/neutral.css` concentra os tokens de tema e os ajustes de layout, 
 
 Testar preferencialmente em 1440, 1024, 768, 390 e 320 px:
 navegação por teclado, foco dos campos, dropdown de exportação, alternância de temas, telas de login e configuração, canvas, zoom e exportação PNG/WebP/JSON. Antes de liberar o deploy, executar `npm run typecheck`, `npm test` e `npm run build`.
+
+## FrameCraft 2.0 — campanhas com fidelidade ao assunto
+
+O motor anterior usava praticamente a mesma composição geométrica para qualquer pedido. Esta versão introduz intenção visual (`professional-ad`, `editorial` e `simple-post`), extração de entidades e blueprints diferentes para consoles/games, SaaS, educação, produtos e composições abstratas.
+
+### Funcionalidades
+
+- `src/lib/subjectFidelity.ts`: guarda a identidade original (PS5/PlayStation 5, QA Hub e outros produtos), mesmo quando o prompt refinado propõe só geometria/cores.
+- Aprimorar com IA **substitui o texto do campo principal**; a descrição original é preservada em `originalPrompt` e enviada ao backend ao gerar.
+- `src/lib/proComposer.ts`: compõe formas a partir do assunto, formato, estilo e paleta reais. Não usa `Math.random`, não renderiza código arbitrário e gera o mesmo JSON para as mesmas entradas.
+- Ilustrações `path` com sintaxe SVG estritamente limitada a comandos geométricos; passam por Zod e são renderizadas pelo React Konva.
+- PS5: assinatura PlayStation 5 e silhueta vetorial estilizada com perspectiva e linhas de energia. **Não** é fotografia nem ativo oficial da Sony.
+- `auditProfessionalDesign(design, intent)`: alerta quando marca ou produto obrigatório não aparece, há texto cortado, hierarquia ausente ou composição genérica.
+- Backend local e Edge Function Supabase compartilham o mesmo compositor e a mesma política de fidelidade.
+- Skills locais: `framecraft-campaign-director`, `framecraft-visual-qa`, `framecraft-hyperframes-composition`. Leia `frame.md` para tokens de brand independentes do layout.
+
+### Limitação consciente do motor
+
+O Hyperframes inspira a arquitetura de autoria, preview e render determinísticos, mas sua API/CLI é voltada a **vídeos**. O FrameCraft continua com React Konva para artes estáticas e JSON editável. Esta versão amplia fortemente a qualidade de ilustrações vetoriais, porém **não equivale à geração de pixels por um modelo de imagens como GPT Image**. Os antigos endpoints gratuitos SDXL e Stable Diffusion 3 no NVIDIA Build aparecem como descontinuados. Um provedor raster compatível pode ser conectado futuramente sem prometer acesso gratuito ilimitado.
+
+### Como validar
+
+```bash
+npm ci
+npm run typecheck
+npm test
+npm run build
+```
+
+Os testes reproduzem o caso reportado de um banner PS5 cuja direção de arte retém preto/ciano, mas perde a marca. A composição deve sempre identificar o PS5 e ser diferente da gerada para QA Hub.

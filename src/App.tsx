@@ -103,6 +103,7 @@ function BriefBox({brief}:{brief:CreativeBrief}){const [open,setOpen]=useState(f
 function GeneratePanel({onConfigureApi,onSignIn,session}:{onConfigureApi:()=>void;onSignIn:()=>void;session:AuthSession|null}){
  const {setBrief,brief,setDesign,loading,setLoading,error,setError}=useStudio();
  const [prompt,setPrompt]=useState(defaultPrompt);
+ const [originalPrompt,setOriginalPrompt]=useState('');
  const [style,setStyle]=useState<GenerateRequest['style']>('studio');
  const [format,setFormat]=useState<GenerateRequest['format']>('portrait');
  const [revision,setRevision]=useState('');
@@ -110,9 +111,7 @@ function GeneratePanel({onConfigureApi,onSignIn,session}:{onConfigureApi:()=>voi
  const [connected,setConnected]=useState(false);
  const [apiUnconfigured,setApiUnconfigured]=useState(isPagesWithoutApi);
  const [apiOffline,setApiOffline]=useState(false);
- const [enhancedPrompt,setEnhancedPrompt]=useState('');
  const [enhancing,setEnhancing]=useState(false);
- const [enhancedOpen,setEnhancedOpen]=useState(false);
  const [repairMessages,setRepairMessages]=useState<string[]>([]);
  async function checkModels(){
    if(isPagesWithoutApi()){setApiUnconfigured(true);setApiOffline(false);setConnected(false);return}
@@ -125,7 +124,7 @@ function GeneratePanel({onConfigureApi,onSignIn,session}:{onConfigureApi:()=>voi
    }catch{setConnected(false);setApiOffline(true)}
  }
  useEffect(()=>{void checkModels();const listener=()=>{void checkModels()};window.addEventListener(API_CHANGED_EVENT,listener);return()=>window.removeEventListener(API_CHANGED_EVENT,listener)},[]);
- useEffect(()=>{setEnhancedPrompt('');setEnhancedOpen(false)},[prompt,style,format]);
+
  async function enhance(){
    if(!session){onSignIn();return}
    if(apiUnconfigured){setError('Backend HTTPS não está conectado.');return}
@@ -137,12 +136,13 @@ function GeneratePanel({onConfigureApi,onSignIn,session}:{onConfigureApi:()=>voi
      const response=await fetch(apiUrl('enhance'),{
        method:'POST',
        headers:{'Content-Type':'application/json',Authorization:'Bearer '+token},
-       body:JSON.stringify({prompt,style,format}),
+       body:JSON.stringify({prompt,originalPrompt:originalPrompt||prompt.slice(0,3000),style,format}),
      });
      const result=await response.json() as {enhancedPrompt?:string;brief?:CreativeBrief;model?:string;error?:string};
      if(!response.ok||!result.enhancedPrompt)throw new Error(result.error||'Falha ao aprimorar o prompt.');
-     setEnhancedPrompt(result.enhancedPrompt);
-     setEnhancedOpen(true);
+     // Rewrite the main prompt in place; preserve the original subject separately.
+     setOriginalPrompt(previous=>previous||prompt.slice(0,3000));
+     setPrompt(result.enhancedPrompt.slice(0,8500));
      if(result.brief)setBrief(result.brief);
    }catch(e){setError(e instanceof Error?e.message:'Não foi possível detalhar o prompt.')}
    finally{setEnhancing(false)}
@@ -155,12 +155,12 @@ function GeneratePanel({onConfigureApi,onSignIn,session}:{onConfigureApi:()=>voi
    try{
      const token=await auth.getToken();
      if(!token){onSignIn();return}
-     const request={prompt,style,format,...(enhancedPrompt?{enhancedPrompt}:{}),...(useRevision?{instruction:revision}:{} )};
+     const request={prompt,originalPrompt:originalPrompt||undefined,style,format,...(useRevision?{instruction:revision}:{} )};
      const r=await fetch(apiUrl('generate'),{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+token},body:JSON.stringify(request)});
      const response=await r.json() as {brief?:CreativeBrief,design?:Design,error?:string,model?:string,repairs?:string[],enhancedPrompt?:string};
      if(!r.ok||!response.brief||!response.design)throw new Error(response.error||`HTTP ${r.status}: erro na geração`);
      const validated=designSchema.parse(response.design);setBrief(response.brief);setDesign(validated);
-     if(!enhancedPrompt&&response.enhancedPrompt){setEnhancedPrompt(response.enhancedPrompt);setEnhancedOpen(true)}
+     // The professional art direction remains editable in the primary text field.
      setRepairMessages(Array.isArray(response.repairs)?response.repairs:[]);
      setShowRevision(false);setRevision('');
    }catch(e){setError(e instanceof Error?e.message:'Falha na geração')}
@@ -169,15 +169,12 @@ function GeneratePanel({onConfigureApi,onSignIn,session}:{onConfigureApi:()=>voi
  return <aside className="generate-panel">
    <div className="side-heading"><div><h3>Criar imagem</h3><p className="fc-side-description">Descreva o que você tem em mente.</p></div></div>
    <div className="prompt-content"><label className="input-label" htmlFor="prompt">Sua ideia</label>
-    <div className="prompt-box"><textarea id="prompt" value={prompt} onChange={e=>setPrompt(e.target.value)} placeholder="Ex.: Um post para divulgar minha plataforma de testes, com um estilo elegante e moderno..." rows={6} maxLength={3000}/><div className="prompt-foot"><span><WandSparkles size={14}/> Linguagem natural</span><span>{prompt.length}/3000</span></div></div>
+    <div className="prompt-box"><textarea id="prompt" value={prompt} onChange={e=>{setPrompt(e.target.value);if(!originalPrompt)setOriginalPrompt('')}} placeholder="Ex.: Um post para divulgar minha plataforma de testes, com um estilo elegante e moderno..." rows={6} maxLength={8500}/><div className="prompt-foot"><span><WandSparkles size={14}/> Linguagem natural</span><span>{prompt.length}/8500</span></div></div>
     <div className="fc-options">
      <label className="fc-option"><span>Estilo</span><div className="select-wrap"><select aria-label="Estilo visual" value={style} onChange={e=>setStyle(e.target.value as GenerateRequest['style'])}>{styles.map(([value,label])=><option value={value} key={value}>{label}</option>)}</select><ChevronDown size={15}/></div></label>
      <label className="fc-option"><span>Formato</span><div className="select-wrap"><select aria-label="Formato da imagem" value={format} onChange={e=>setFormat(e.target.value as GenerateRequest['format'])}>{sizes.map(([value,label])=><option value={value} key={value}>{label}</option>)}</select><ChevronDown size={15}/></div></label>
     </div>
     <button type="button" className="fc-enhance-btn" disabled={loading||enhancing} onClick={()=>void enhance()}>{enhancing?<><span className="spinner"/> Detalhando a direção de arte...</>:<><WandSparkles size={17}/> Aprimorar meu prompt com IA <ArrowRight size={16}/></>}</button>
-    {enhancedPrompt&&<div className="fc-enhanced-panel"><button className="fc-enhanced-header" type="button" aria-expanded={enhancedOpen} onClick={()=>setEnhancedOpen(v=>!v)}><span><Sparkles size={15}/> Prompt profissional gerado</span><ChevronDown size={15} className={enhancedOpen?'rotate':''}/></button>
-     {enhancedOpen&&<><p>Revise ou edite a direção de arte detalhada antes de gerar a imagem.</p><textarea value={enhancedPrompt} onChange={e=>setEnhancedPrompt(e.target.value)} rows={11} maxLength={8500} aria-label="Prompt aprimorado pela NVIDIA"/><div className="fc-enhanced-foot"><span>{enhancedPrompt.length} caracteres</span><button type="button" onClick={()=>void navigator.clipboard.writeText(enhancedPrompt)}>Copiar prompt</button></div></>}
-    </div>}
     <button className="generate-btn" disabled={loading||enhancing} onClick={()=>void generate()}>{loading?<><span className="spinner"/> Criando design...</>:<><Sparkles size={18}/> Gerar minha imagem <ArrowRight size={17}/></>}</button>
     {loading&&<p className="busy-caption">Aplicando a direção de arte e preparando o JSON editável.</p>}
     {error&&<div className="error-box" role="alert"><CircleHelp size={17}/><span>{error}</span><button type="button" aria-label="Fechar erro" onClick={()=>setError(null)}><X size={16}/></button></div>}

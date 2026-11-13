@@ -43,11 +43,20 @@ export const lineElement = baseShape.extend({
   type: z.literal('line'), fill: hex.default('#2fcaa5'),
   strokeWidth: z.number().min(1).max(30).default(5),
 });
+export const pathElement = baseShape.extend({
+  type: z.literal('path'),
+  // Only SVG path instructions, never markup, URLs, scripts or event handlers.
+  data: z.string().min(8).max(4000).regex(/^[MmLlHhVvCcSsQqTtZz0-9eE.,+\-\s]+$/,
+    'Apenas comandos SVG de path são aceitos'),
+  fill: hex.default('#00AEEF'),
+  stroke: hex.optional(),
+  strokeWidth: z.number().min(0).max(30).default(0),
+});
 export const imageElement = baseShape.extend({
   type: z.literal('image'),
   src: z.string().max(4_800_000).refine(v => v.startsWith('data:image/png;base64,') || v.startsWith('data:image/jpeg;base64,') || v.startsWith('data:image/webp;base64,'), 'Imagem precisa ser data URI local'),
 });
-export const designElement = z.discriminatedUnion('type', [textElement, rectElement, ellipseElement, polygonElement, starElement, lineElement, imageElement]);
+export const designElement = z.discriminatedUnion('type', [textElement, rectElement, ellipseElement, polygonElement, starElement, lineElement, pathElement, imageElement]);
 export type DesignElement = z.infer<typeof designElement>;
 export type TextElement = z.infer<typeof textElement>;
 export type RectElement = z.infer<typeof rectElement>;
@@ -72,6 +81,11 @@ export const briefSchema = z.object({
   hierarchy: z.string().max(500),
   imagePrompt: z.string().max(900).optional(),
   callToAction: z.string().max(120),
+  brand: z.string().max(140).optional(),
+  subject: z.string().max(170).optional(),
+  mustInclude: z.array(z.string().min(1).max(170)).max(12).optional(),
+  heroElement: z.string().max(400).optional(),
+  renderIntent: z.enum(['professional-ad','editorial','simple-post']).optional(),
 });
 export type CreativeBrief = z.infer<typeof briefSchema>;
 export const generateRequestSchema = z.object({
@@ -81,6 +95,7 @@ export const generateRequestSchema = z.object({
   previous: designSchema.optional(),
   instruction: z.string().trim().max(1200).optional(),
   enhancedPrompt: z.string().trim().max(8500).optional(),
+  originalPrompt: z.string().trim().max(3000).optional(),
 });
 export type GenerateRequest = z.infer<typeof generateRequestSchema>;
 export const formats = {
