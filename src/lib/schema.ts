@@ -1,0 +1,93 @@
+import { z } from 'zod';
+
+const hex = z.string().regex(/^#[0-9a-fA-F]{6}$/, 'Use cor hexadecimal #RRGGBB');
+export const baseShape = z.object({
+  id: z.string().min(1).max(80),
+  x: z.number().finite().min(-4000).max(6000),
+  y: z.number().finite().min(-4000).max(6000),
+  width: z.number().finite().min(1).max(6000),
+  height: z.number().finite().min(1).max(6000),
+  rotation: z.number().finite().min(-360).max(360).default(0),
+  opacity: z.number().finite().min(0).max(1).default(1),
+});
+
+export const textElement = baseShape.extend({
+  type: z.literal('text'), content: z.string().max(400),
+  fontSize: z.number().min(10).max(260).default(48),
+  fontWeight: z.enum(['normal','bold']).default('bold'),
+  color: hex.default('#ffffff'),
+  align: z.enum(['left','center','right']).default('left'),
+  fontFamily: z.enum(['Inter', 'Arial', 'Georgia', 'Verdana']).default('Inter'),
+});
+export const rectElement = baseShape.extend({
+  type: z.literal('rect'), fill: hex.default('#2fcaa5'),
+  radius: z.number().min(0).max(300).default(20),
+  stroke: hex.optional(), strokeWidth: z.number().min(0).max(30).default(0),
+});
+export const ellipseElement = baseShape.extend({
+  type: z.literal('ellipse'), fill: hex.default('#2fcaa5'),
+});
+export const imageElement = baseShape.extend({
+  type: z.literal('image'),
+  src: z.string().max(4_800_000).refine(v => v.startsWith('data:image/png;base64,') || v.startsWith('data:image/jpeg;base64,') || v.startsWith('data:image/webp;base64,'), 'Imagem precisa ser data URI local'),
+});
+export const designElement = z.discriminatedUnion('type', [textElement, rectElement, ellipseElement, imageElement]);
+export type DesignElement = z.infer<typeof designElement>;
+export type TextElement = z.infer<typeof textElement>;
+export type RectElement = z.infer<typeof rectElement>;
+export type EllipseElement = z.infer<typeof ellipseElement>;
+export type ImageElement = z.infer<typeof imageElement>;
+export const designSchema = z.object({
+  version: z.literal(1).default(1),
+  title: z.string().min(1).max(90).default('Sem título'),
+  description: z.string().max(500).default(''),
+  canvas: z.object({ width: z.number().int().min(320).max(2400), height: z.number().int().min(320).max(2400), background: hex, backgroundEnd: hex.optional() }),
+  elements: z.array(designElement).max(48),
+});
+export type Design = z.infer<typeof designSchema>;
+export const briefSchema = z.object({
+  concept: z.string().min(4).max(600),
+  audience: z.string().min(2).max(250),
+  headline: z.string().min(2).max(140),
+  subheadline: z.string().max(180),
+  visualDirection: z.string().min(8).max(1000),
+  typography: z.string().max(400),
+  palette: z.array(hex).min(2).max(6),
+  hierarchy: z.string().max(500),
+  imagePrompt: z.string().max(900).optional(),
+  callToAction: z.string().max(120),
+});
+export type CreativeBrief = z.infer<typeof briefSchema>;
+export const generateRequestSchema = z.object({
+  prompt: z.string().trim().min(8).max(3000),
+  style: z.enum(['studio','bold','editorial','minimal','playful']),
+  format: z.enum(['portrait','square','story','landscape','banner']),
+  previous: designSchema.optional(),
+  instruction: z.string().trim().max(1200).optional(),
+});
+export type GenerateRequest = z.infer<typeof generateRequestSchema>;
+export const formats = {
+  portrait: { width: 1080, height: 1350, label: 'Post 4:5' },
+  square: { width: 1080, height: 1080, label: 'Quadrado 1:1' },
+  story: { width: 1080, height: 1920, label: 'Story 9:16' },
+  landscape: { width: 1920, height: 1080, label: 'Paisagem 16:9' },
+  banner: { width: 1200, height: 630, label: 'Banner 1.91:1' },
+} as const;
+export function normalizeDesign(design: Design): Design {
+  const ids = new Set<string>();
+  return {...design, elements: design.elements.map((e, i) => {
+    let id = e.id;
+    if (ids.has(id)) {
+      let suffix = i;
+      let tail = `-${suffix}`;
+      let candidate = e.id.slice(0, 80 - tail.length) + tail;
+      while (ids.has(candidate)) {
+        suffix++; tail = `-${suffix}`;
+        candidate = e.id.slice(0, 80 - tail.length) + tail;
+      }
+      id = candidate;
+    }
+    ids.add(id);
+    return {...e, id, x: Math.round(e.x), y: Math.round(e.y), width: Math.round(e.width), height: Math.round(e.height)};
+  })};
+}
