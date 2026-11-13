@@ -156,65 +156,34 @@ A NVIDIA pode produzir cores CSS (`rgba()`, `rgb()`, `hsl()`, `#RGB`, `#RGBA`, `
 Para testar a correção: `npm.cmd test`, `npm.cmd run typecheck`, `npm.cmd run build`. Esses comandos são para execução local caso o ambiente de geração não disponibilize as dependências.
 
 
-## FrameCraft 1.3 — direção de arte profissional e backend Supabase
+## FrameCraft 1.4 — prompt profissional e login por e-mail
 
-O editor diferencia **layout vetorial** de **imagens fotográficas**. Uma IA de linguagem cria o briefing; o motor de composição monta e exporta uma peça editável de texto e formas. Esta versão não integra um modelo de difusão de imagens. Não existe promessa de gerar fotografias a partir deste JSON.
+Escreva qualquer descrição, escolha estilo e proporção, depois pressione **Aprimorar meu prompt com IA**. A NVIDIA produz uma direção de arte detalhada com público, objetivo, copy, hierarquia, paleta, tipografia, margens, composição e critérios de qualidade. Você pode **editar ou copiar** o prompt antes de gerar a imagem JSON editável. O botão de gerar também funciona diretamente, retornando a composição e o prompt detalhado.
 
-### Motor visual aprimorado
+### Acesso seguro (sem token no frontend)
 
-- Novos elementos: linhas, polígonos regulares (triângulo a 12 lados), estrelas, contornos e gradientes em retângulos/elipses.
-- Direção de arte: headline dominante, hierarquia tipográfica, cores legíveis, uma área visual focal, CTA ancorado e margens verificáveis.
-- Regras de qualidade: caixas com texto muito pequeno, cortes de conteúdo, sobreposições e falta de foco gráfico são sinalizadas. O backend Node local reconstrói composições problemáticas em formato profissional com o briefing da NVIDIA.
-- No Supabase Edge, a NVIDIA produz um briefing detalhado e o motor monta o JSON profissional sem depender de coordenadas arbitrárias do modelo.
-- Templates de exemplo atualizados para demonstrar o motor visual.
-- A fonte Inter é aplicada com fallback e redraw após carregamento das fontes.
+A geração utiliza sessões do **Supabase Auth por e-mail**, não o antigo token `FRAMECRAFT_ACCESS_TOKEN`. A chave NVIDIA continua apenas em Secrets da Edge Function, sem exposição no GitHub Pages.
 
-### GitHub Pages
+1. Em [Supabase Auth → URL Configuration](https://supabase.com/dashboard/project/kbezscxuhqculdvraqun/auth/url-configuration), adicione `https://dev-oestagiario.github.io/FrameCraft/` às **Redirect URLs**.
+2. Confirme que a autenticação por e-mail está ativa. O serviço SMTP padrão da Supabase pode ter limite de destinatários e envios; para acesso público maior, configure um provedor SMTP.
+3. Abra o [FrameCraft](https://dev-oestagiario.github.io/FrameCraft/) e clique **Entrar**. Informe seu e-mail, receba um link e clique nele para voltar ao editor.
+4. Aprimore o prompt, ajuste o texto e gere a composição.
 
-Frontend publicado automaticamente em **https://dev-oestagiario.github.io/FrameCraft/** por `.github/workflows/pages.yml` (testes, TypeScript, build e deploy).
+O secret `FRAMECRAFT_ACCESS_TOKEN` antigo pode permanecer salvo no Supabase, mas **não é mais utilizado** pelo backend. Nunca o copie para código público.
 
-A URL pública HTTPS do backend já está configurada como fallback no workflow:
+### Backend e cotas
 
-```text
-https://kbezscxuhqculdvraqun.supabase.co/functions/v1/framecraft-api
-```
+Edge Function: `https://kbezscxuhqculdvraqun.supabase.co/functions/v1/framecraft-api`
 
-A variável opcional `FRAMECRAFT_API_URL` do repositório GitHub pode substituir essa URL (deve conter **somente a URL pública**, nunca a chave da NVIDIA).
+- `GET /api/health` — status do backend e NVIDIA
+- `GET /api/models` — disponibilidade sem divulgar credenciais
+- `POST /api/enhance` — descrição livre → prompt detalhado pela NVIDIA
+- `POST /api/generate` — direção de arte → JSON visual editável
 
-### Habilitar geração NVIDIA (etapa de configuração privada)
+Os endpoints de escrita exigem acesso autenticado e e-mail confirmado. O backend verifica a sessão junto ao Supabase Auth e usa uma função SQL de controle de cota atômico em uma tabela no schema `private`, inacessível a clientes públicos. O usuário não precisa saber nenhuma chave de API.
 
-A Edge Function `framecraft-api` está ativa no projeto Supabase **Dev**. A chamada `GET /api/health` confirmou HTTP 200. Entretanto, nenhuma chave secreta foi adicionada automaticamente porque a conexão Supabase permite publicar Edge Functions, mas **não oferece gerenciamento de secrets**.
+### Limitações e publicação
 
-1. Abra [Supabase Dashboard – Edge Functions Secrets](https://supabase.com/dashboard/project/kbezscxuhqculdvraqun/functions/secrets).
-2. Cadastre `NVIDIA_API_KEY` com sua chave privada da NVIDIA Build (a mesma que usa no `.env` local).
-3. Cadastre `FRAMECRAFT_ACCESS_TOKEN` com uma senha longa aleatória de **pelo menos 24 caracteres** (diferente da chave NVIDIA). Para gerar no PowerShell:
+A geração produz **composições vetoriais editáveis**, não fotografias geradas por difusão. Imagens fotográficas podem ser importadas como camadas; motor de geração fotográfica ainda não integrado.
 
-```powershell
-$bytes = New-Object byte[] 32
-[System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($bytes)
-([BitConverter]::ToString($bytes)).Replace('-', '')
-```
-
-4. No site do FrameCraft, clique em **Conexão**, confira a URL do backend, cole **apenas o token de acesso** e clique em **Salvar conexão**.
-5. Clique em **Gerar minha imagem**. O navegador envia o token de acesso, e o Supabase Edge usa `NVIDIA_API_KEY` apenas no servidor.
-
-**Segurança:** sem `FRAMECRAFT_ACCESS_TOKEN` configurado no Supabase, a função **bloqueia a geração com HTTP 503**, evitando uma API aberta para consumir créditos. Não coloque segredos em `VITE_*`, GitHub Actions variables, código-fonte ou mensagens públicas. O token digitado na UI é armazenado somente no `sessionStorage` desta aba.
-
-Rotas:
-- `GET /api/health`
-- `GET /api/models`
-- `POST /api/generate` com header `Authorization: Bearer <token>`
-
-O backend realiza uma limitação simples de cinco gerações por minuto por instância. Para acesso público multiusuário, autenticação individual e rate limiting distribuído são recomendados.
-
-A função Supabase é implantada separadamente do GitHub Pages. Consulte `supabase/functions/framecraft-api/README.md` e `supabase/config.toml`.
-
-### Verificação
-
-```powershell
-npm.cmd run typecheck
-npm.cmd test
-npm.cmd run build
-```
-
-Antes de atualizar o GitHub, valide nos principais viewports e na prévia ampliada do canvas.
+O frontend é publicado automaticamente no GitHub Pages em cada commit na `main`. As Edge Functions são implantadas separadamente pelo conector do Supabase.

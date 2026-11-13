@@ -1,50 +1,49 @@
-# FrameCraft HTTPS API (Supabase Edge Function)
+# Backend HTTPS — FrameCraft
 
-Implantado em **Supabase Dev** na função `framecraft-api`.
+Projeto Supabase Dev: `kbezscxuhqculdvraqun`.
 
-Endpoint: `https://kbezscxuhqculdvraqun.supabase.co/functions/v1/framecraft-api`
+Função pública de transporte: `https://kbezscxuhqculdvraqun.supabase.co/functions/v1/framecraft-api`. Ela **não é um proxy aberto**: a geração exige login Supabase Auth por e-mail confirmado e passa por controle de cota transacional no banco antes de consumir a NVIDIA.
 
-## Credenciais privadas necessárias
+## Credenciais
 
-No Supabase Dashboard, abra **Project Settings / Edge Functions → Secrets** e cadastre:
+- `NVIDIA_API_KEY` — necessária e **privada** (Supabase Edge Function Secrets).
+- `SUPABASE_SERVICE_ROLE_KEY` — provisionada pelo Supabase, privada e usada apenas no servidor para controle de cotas.
+- `SUPABASE_ANON_KEY` — usada pelo backend para validar o JWT junto a `/auth/v1/user`.
+- `FRAMECRAFT_ACCESS_TOKEN` — **legado, não utilizado**. Não é necessário informá-lo no site. Pode ser revogado caso não seja usado por outros serviços.
 
-- `NVIDIA_API_KEY`: sua chave NVIDIA Build, mantida exclusivamente no Supabase.
-- `FRAMECRAFT_ACCESS_TOKEN`: um token privado com no mínimo 24 caracteres para proteger o endpoint público.
-- `NVIDIA_MODEL`: opcional, `auto` por padrão.
+O frontend contém apenas a chave **publishable** pública, apropriada para aplicações web.
 
-Para gerar um token aleatório em PowerShell:
+## Autenticação
 
-```powershell
-$b = New-Object byte[] 32
-[System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($b)
-([BitConverter]::ToString($b)).Replace('-', '')
+O site oferece **Entrar com e-mail**, enviando um magic link por Supabase Auth. Configure em **Auth → URL Configuration → Redirect URLs**:
+
+```text
+https://dev-oestagiario.github.io/FrameCraft/
 ```
 
-Copie o token gerado para `FRAMECRAFT_ACCESS_TOKEN` no Supabase. No site GitHub Pages, abra **Conexão**, informe o **mesmo token** (não a chave NVIDIA), e salve.
+Autenticação por e-mail e envio de links devem estar habilitados; se o serviço SMTP padrão não puder enviar ao destinatário, configure um provedor SMTP.
 
-O frontend envia `Authorization: Bearer <token>` para o endpoint de geração. O token é guardado apenas no `sessionStorage` da aba. A chave NVIDIA nunca é exposta ao navegador.
-
-## Segurança
-
-A função possui `verify_jwt=false` porque valida explicitamente `FRAMECRAFT_ACCESS_TOKEN` no próprio código. **Sem o token nos Secrets, ela retorna HTTP 503 para toda geração**. Nunca remova essa verificação ou publique credenciais no repositório.
-
-CORS aceita `https://dev-oestagiario.github.io`, localhost:5173 e 127.0.0.1:5173. O rate limit em memória por instância é uma proteção complementar, **não global**. Para operação multiusuário pública, use autenticação de usuário e rate limit persistente/externo.
+Nenhuma rota de IA aceita token privado compartilhado; ela verifica o Bearer JWT da sessão autenticada e e-mail confirmado.
 
 ## Rotas
 
-- `GET /api/health` — disponibilidade HTTPS, indica apenas se secrets estão configurados
-- `GET /api/models` — status da conexão, sem revelar credenciais
-- `POST /api/generate` — descrição → briefing NVIDIA → JSON profissional; requer token
-- `OPTIONS` — CORS preflight
+- `GET /api/health` — status da API (não requer login).
+- `GET /api/models` — configuração pública e flag `requiresAuth`.
+- `POST /api/enhance` — descrição simples → prompt detalhado e briefing NVIDIA.
+- `POST /api/generate` — descrição e, opcionalmente, prompt revisado → composição JSON e novo briefing.
 
-Os layouts são vetoriais/editáveis. A função não cria imagens fotográficas diretamente. PNG e WebP são exportados pelo canvas do frontend.
+As rotas de escrita exigem sessão autenticada, validam tamanho do JSON e respeitam um limite persistente no PostgreSQL. O secret NVIDIA permanece fora do GitHub.
+
+## Rate limiting
+
+A migração `framecraft_authenticated_ai_rate_limits` criou a tabela `private.framecraft_ai_requests` e a RPC `public.framecraft_consume_ai_quota` acessível apenas à `service_role`.
+
+Há limites por usuário e globais, por minuto e nas últimas 24 horas, para proteger a cota gratuita da NVIDIA. Usuários anônimos não têm permissão de chamar a RPC. Clientes `anon` e `authenticated` também não recebem acesso à tabela.
 
 ## Deploy
 
-Os arquivos da função foram publicados pela conexão Supabase Dev. Para deploy futuro via CLI:
+O backend é implantado pelo Supabase MCP na função `framecraft-api`, com autenticação JWT validada no próprio handler (`verify_jwt=false` no gateway, pois a função chama `auth/v1/user` explicitamente). Não remover essa verificação sem substituí-la por uma checagem equivalente.
 
-```bash
-npx supabase functions deploy framecraft-api --project-ref kbezscxuhqculdvraqun
-```
+O frontend é publicado separadamente via GitHub Pages Actions. Editar o código nesta pasta não faz deploy do backend automaticamente.
 
-O GitHub Pages é publicado em workflow próprio; alterações no código da Edge Function devem ser implantadas no Supabase separadamente, salvo se um deploy automatizado protegido for configurado.
+A produção visual atual gera **JSON editável e arte vetorial**, não fotos geradas por modelos de difusão.

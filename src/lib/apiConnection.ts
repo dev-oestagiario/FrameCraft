@@ -1,5 +1,4 @@
 const STORAGE_KEY = 'framecraft.api-origin.v1';
-const ACCESS_KEY = 'framecraft.api-session-token.v1';
 export const API_CHANGED_EVENT = 'framecraft:api-changed';
 
 const buildOrigin = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? '';
@@ -41,18 +40,6 @@ export function saveApiOrigin(value: string): void {
   window.dispatchEvent(new Event(API_CHANGED_EVENT));
 }
 
-export function getAccessToken():string {
-  if(typeof window==='undefined')return '';
-  try{return window.sessionStorage.getItem(ACCESS_KEY)||''}catch{return ''}
-}
-export function saveAccessToken(token:string):void {
-  if(typeof window==='undefined')return;
-  try{
-    if(token.trim())window.sessionStorage.setItem(ACCESS_KEY,token.trim());
-    else window.sessionStorage.removeItem(ACCESS_KEY);
-  }catch{throw new Error('O navegador bloqueou o armazenamento do token nesta sessão.')}
-  window.dispatchEvent(new Event(API_CHANGED_EVENT));
-}
 export function apiUrl(resource: string, origin = getApiOrigin()): string {
   const path = resource.replace(/^\/+/, '');
   return `${origin}/api/${path}`;

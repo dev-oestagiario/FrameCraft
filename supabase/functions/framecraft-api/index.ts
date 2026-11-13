@@ -1,7 +1,7 @@
 /**
  * FrameCraft HTTPS API · Supabase Edge Functions (Deno)
  * IMPORTANT: Never deploy NVIDIA_API_KEY to GitHub Pages.
- * Generation requires a separately configured FRAMECRAFT_ACCESS_TOKEN secret.
+ * Generation requires verified Supabase email sessions with database-enforced quotas.
  */
 import {auditProfessionalDesign,composeProfessionalDesign,type PosterBrief,type PosterStyle,type PosterFormat} from './proComposer.ts';
 
@@ -13,21 +13,60 @@ const FREE_TRIAL_MODELS=[
  'nvidia/nemotron-3.5-bolt-e4b',
  'nvidia/nemotron-3.5-super-vl-120b-a12b',
 ];
-const recentCalls:number[]=[];
 const json=(body:unknown,status=200,origin?:string|null)=>{
  const headers=new Headers({'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store'});
  if(origin&&ALLOWED_ORIGINS.has(origin)){
   headers.set('Access-Control-Allow-Origin',origin);
   headers.set('Vary','Origin');
-  headers.set('Access-Control-Allow-Headers','authorization, content-type');
+  headers.set('Access-Control-Allow-Headers','authorization, content-type, apikey');
   headers.set('Access-Control-Allow-Methods','OPTIONS, GET, POST');
  }
  return new Response(JSON.stringify(body),{status,headers});
 };
-function safeTokenMatch(actual:string,expected:string):boolean{
- if(!expected || actual.length!==expected.length)return false;
- let diff=0;for(let i=0;i<actual.length;i++)diff|=actual.charCodeAt(i)^expected.charCodeAt(i);
- return diff===0;
+const SB_URL=Deno.env.get('SUPABASE_URL')||'https://kbezscxuhqculdvraqun.supabase.co';
+const ANON_KEY=Deno.env.get('SUPABASE_ANON_KEY')||'';
+const SERVICE_KEY=Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')||'';
+async function authenticatedUser(req:Request):Promise<string|null>{
+ const token=req.headers.get('authorization')?.match(/^Bearer\s+(.+)$/i)?.[1]||'';
+ if(!ANON_KEY||!token||token.length>4096)return null;
+ try{
+  const res=await fetch(SB_URL+'/auth/v1/user',{headers:{apikey:ANON_KEY,Authorization:'Bearer '+token},signal:AbortSignal.timeout(8000)});
+  if(!res.ok)return null;
+  const user=await res.json() as {id?:string;email_confirmed_at?:string;is_anonymous?:boolean};
+  if(!user.id||!user.email_confirmed_at||user.is_anonymous)return null;
+  return user.id;
+ }catch{return null}
+}
+async function takeQuota(uid:string,action:'enhance'|'generate'):Promise<{allowed:boolean;reason?:string;remainingToday?:number}>{
+ if(!SERVICE_KEY)throw new Error('Cota indisponível: service role não configurada.');
+ const res=await fetch(SB_URL+'/rest/v1/rpc/framecraft_consume_ai_quota',{
+  method:'POST',
+  headers:{'Content-Type':'application/json',apikey:SERVICE_KEY,Authorization:'Bearer '+SERVICE_KEY},
+  body:JSON.stringify({p_user_id:uid,p_action:action}),signal:AbortSignal.timeout(9000)
+ });
+ if(!res.ok)throw new Error('Controle de cota não disponível; geração bloqueada para proteção da NVIDIA.');
+ return await res.json() as {allowed:boolean;reason?:string;remainingToday?:number};
+}
+function detailedPrompt(input:GenerateInput,brief:PosterBrief,raw:Record<string,unknown>):string{
+ const direct=typeof raw.enhancedPrompt==='string'?raw.enhancedPrompt.trim():'';
+ if(direct.length>=650&&direct.length<=8500)return direct;
+ const dims={portrait:'1080×1350',square:'1080×1080',story:'1080×1920',landscape:'1920×1080',banner:'1200×630'}[input.format];
+ return [
+  'DIREÇÃO DE ARTE PROFISSIONAL / FRAMECRAFT',
+  'CONTEXTO ORIGINAL: '+input.prompt,
+  'OBJETIVO: '+brief.concept+'. Não criar fatos, funcionalidades, preços nem promessas que não estejam no pedido.',
+  'PÚBLICO E TOM: '+String((brief as Record<string,unknown>).audience||'Público interessado na mensagem')+'. Redação clara e adequada à marca.',
+  'TELA E FORMATO: '+dims+' pixels; estilo '+input.style+'; respeitar margem segura de 7% em todos os lados.',
+  'COPY E ESTRUTURA: headline '+JSON.stringify(brief.headline)+'; linha de apoio '+JSON.stringify(brief.subheadline||'apenas se necessária')+'; chamada para ação '+JSON.stringify(brief.callToAction)+'.',
+  'DIREÇÃO ARTÍSTICA: '+String((brief as Record<string,unknown>).visualDirection||'Composição editorial de alto contraste')+'. Hierarquia forte, uma área visual focal e equilíbrio geométrico.',
+  'HIERARQUIA: '+String((brief as Record<string,unknown>).hierarchy||'Manchete dominante, apoio sucinto, CTA ancorado')+'. Não usar microtexto, pequenos cards em série ou blocos longos.',
+  'TIPOGRAFIA: '+String((brief as Record<string,unknown>).typography||'Tipografia expressiva e legível')+'. Manchete dominante, secundário com leitura fácil em miniatura, no máximo duas famílias.',
+  'CORES E CONTRASTE: '+(Array.isArray(brief.palette)?brief.palette.join(', '):'#0B1C24, #68EAC0, #F8FFF9')+'. Garantir contraste de texto, consistência e impacto intencional.',
+  'ELEMENTOS VISUAIS: geometria vetorial editável, linhas, formas orgânicas simplificadas, círculos, estrelas ou polígonos; evitar interface fictícia.',
+  'CRITÉRIOS DE QUALIDADE: evitar cortes, excesso de espaço vazio, sobreposição, texto menor que 28px, CTA ilegível e conteúdo inventado.',
+  'ENTREGA: composição estruturada em JSON editável com textos, gradientes, retângulos, elipses, linhas, estrelas e polígonos.',
+  input.instruction?'INSTRUÇÃO ADICIONAL: '+input.instruction:'RESULTADO ESPERADO: peça visual profissional com composição memorável.'
+ ].join('\n\n').slice(0,8500);
 }
 function parseJSON(text:string):Record<string,unknown>{
  const cleaned=text.replace(/<think>[\s\S]*?<\/think>/gi,'').trim();
@@ -61,18 +100,19 @@ function safeBrief(raw:Record<string,unknown>,request:string):PosterBrief&Record
   callToAction:invalidFreeClaim?'Saiba mais':cta,
  };
 }
-type GenerateInput={prompt:string;style:PosterStyle;format:PosterFormat;instruction?:string};
+type GenerateInput={prompt:string;style:PosterStyle;format:PosterFormat;instruction?:string;enhancedPrompt?:string};
 function isInput(data:unknown):data is GenerateInput{
  if(!data||typeof data!=='object')return false;
  const obj=data as Record<string,unknown>;
- return typeof obj.prompt==='string'&&obj.prompt.trim().length>=8&&obj.prompt.length<=3000
+ return typeof obj.prompt==='string'&&obj.prompt.trim().length>=2&&obj.prompt.length<=3000
   &&['studio','bold','editorial','minimal','playful'].includes(String(obj.style))
   &&['portrait','square','story','landscape','banner'].includes(String(obj.format))
-  &&(obj.instruction===undefined||(typeof obj.instruction==='string'&&obj.instruction.length<=1200));
+  &&(obj.instruction===undefined||(typeof obj.instruction==='string'&&obj.instruction.length<=1200))
+  &&(obj.enhancedPrompt===undefined||(typeof obj.enhancedPrompt==='string'&&obj.enhancedPrompt.length<=8500));
 }
-async function nvidiaBrief(input:GenerateInput,apiKey:string):Promise<{brief:PosterBrief&Record<string,unknown>;model:string}>{
- const system=`Você é um diretor de arte sênior de um estúdio internacional. Converta uma descrição informal em briefing estratégico e um plano visual altamente específico. Sua resposta é APENAS UM JSON com os campos: concept, audience, headline, subheadline, visualDirection, typography, palette (lista de cores #RRGGBB), hierarchy, imagePrompt, callToAction. O headline deve ser curto (ideal 25-55 caracteres), contendo a promessa real mais importante, sem inventar marcas nem dados. O subheadline deve ter no máximo 110 caracteres. A direção visual descreve composição autoral, contraste acessível, ritmo, proporção, elementos gráficos geométricos, área segura, dimensões e tipografia. Nunca invente preços, avaliações, desconto, 'grátis' ou funcionalidade não declarada. Evite UI falsa, microtextos, listas densas, pequenos cartões e áreas vazias excessivas. Use português do Brasil. Forme um único foco visual. Represente apenas texto, formas e geometria porque o renderizador não cria fotografias. Entregue JSON, não código ou Markdown.`;
- const user=`DESCRIÇÃO DO USUÁRIO: ${input.prompt}\nESTILO: ${input.style}\nFORMATO: ${input.format}\nREVISÃO: ${input.instruction||'primeira criação'}\nFaça a direção de arte profissional obedecendo ao conteúdo solicitado.`;
+async function nvidiaBrief(input:GenerateInput,apiKey:string):Promise<{brief:PosterBrief&Record<string,unknown>;enhancedPrompt:string;model:string}>{
+ const system=`Você é um diretor de arte sênior de um estúdio internacional. Converta uma descrição informal em briefing estratégico e um plano visual altamente específico. Sua resposta é APENAS UM JSON com os campos: concept, audience, headline, subheadline, visualDirection, typography, palette (lista de cores #RRGGBB), hierarchy, imagePrompt, callToAction, enhancedPrompt. O campo enhancedPrompt deve conter entre 900 e 3500 caracteres de direção de arte aprofundada em português brasileiro com seções OBJETIVO, PÚBLICO, COPY, FORMATO, GRID, ALINHAMENTO, MARGENS, TIPOGRAFIA, PALETA, CONTRASTE, ELEMENTOS VETORIAIS, ACABAMENTO, RESTRIÇÕES, PRODUÇÃO E CONTROLE DE QUALIDADE. Especifique os elementos e sua distribuição, sem inventar fatos. O headline deve ser curto (ideal 25-55 caracteres), contendo a promessa real mais importante, sem inventar marcas nem dados. O subheadline deve ter no máximo 110 caracteres. A direção visual descreve composição autoral, contraste acessível, ritmo, proporção, elementos gráficos geométricos, área segura, dimensões e tipografia. Nunca invente preços, avaliações, desconto, 'grátis' ou funcionalidade não declarada. Evite UI falsa, microtextos, listas densas, pequenos cartões e áreas vazias excessivas. Use português do Brasil. Forme um único foco visual. Represente apenas texto, formas e geometria porque o renderizador não cria fotografias. Entregue JSON, não código ou Markdown.`;
+ const user=`DESCRIÇÃO DO USUÁRIO: ${input.prompt}\nESTILO: ${input.style}\nFORMATO: ${input.format}\nREVISÃO: ${input.instruction||'primeira criação'}\n${input.enhancedPrompt?`PROMPT EDITADO PELO USUÁRIO: ${input.enhancedPrompt.slice(0,8500)}`:''}\nFaça a direção de arte profissional obedecendo ao conteúdo solicitado.`;
  const preferred=Deno.env.get('NVIDIA_MODEL');
  const candidates=[...(preferred&&preferred!=='auto'?[preferred]:[]),...FREE_TRIAL_MODELS];
  let lastError='Nenhum modelo respondeu';
@@ -85,7 +125,7 @@ async function nvidiaBrief(input:GenerateInput,apiKey:string):Promise<{brief:Pos
      headers:{'Content-Type':'application/json',Authorization:`Bearer ${apiKey}`},
      body:JSON.stringify({
       model,messages:[{role:'system',content:system},{role:'user',content:user}],
-      temperature:.45,top_p:.9,max_tokens:2400,stream:false,
+      temperature:.45,top_p:.9,max_tokens:3700,stream:false,
       ...(model.includes('nemotron')?{chat_template_kwargs:{enable_thinking:false}}:{}),
       ...(jsonMode?{response_format:{type:'json_object'}}:{}),
      }),
@@ -98,7 +138,8 @@ async function nvidiaBrief(input:GenerateInput,apiKey:string):Promise<{brief:Pos
     const reply=await response.json() as {choices?:Array<{message?:{content?:string}}>} ;
     const content=reply.choices?.[0]?.message?.content;
     if(!content){lastError=`${model}: resposta sem conteúdo`;continue}
-    return {brief:safeBrief(parseJSON(content),input.prompt),model};
+    const raw=parseJSON(content);const brief=safeBrief(raw,input.prompt);
+    return {brief,enhancedPrompt:detailedPrompt(input,brief,raw),model};
    }catch{lastError=`${model}: resposta não foi um briefing JSON válido`;if(jsonMode)continue}
   }
  }
@@ -107,47 +148,41 @@ async function nvidiaBrief(input:GenerateInput,apiKey:string):Promise<{brief:Pos
 Deno.serve(async(req:Request)=>{
  const origin=req.headers.get('origin');
  if(origin&&!ALLOWED_ORIGINS.has(origin))return json({error:'Origem não autorizada.'},403);
- if(req.method==='OPTIONS'){
-  if(!origin)return new Response(null,{status:204});
-  return new Response(null,{status:204,headers:{
-   'Access-Control-Allow-Origin':origin,'Access-Control-Allow-Methods':'OPTIONS, GET, POST',
-   'Access-Control-Allow-Headers':'authorization, content-type','Access-Control-Max-Age':'86400','Vary':'Origin'
-  }});
- }
+ if(req.method==='OPTIONS')return new Response(null,{status:204,headers:{
+  'Access-Control-Allow-Origin':origin||'https://dev-oestagiario.github.io',
+  'Access-Control-Allow-Methods':'OPTIONS, GET, POST',
+  'Access-Control-Allow-Headers':'authorization, content-type, apikey',
+  'Access-Control-Max-Age':'86400','Vary':'Origin'
+ }});
  const key=Deno.env.get('NVIDIA_API_KEY')||'';
- const accessToken=Deno.env.get('FRAMECRAFT_ACCESS_TOKEN')||'';
  const path=new URL(req.url).pathname;
- if(req.method==='GET' && path.endsWith('/api/health')){
-  return json({status:'ok',configured:Boolean(key),secured:Boolean(accessToken)},200,origin);
- }
- if(req.method==='GET' && path.endsWith('/api/models')){
-  return json({configured:Boolean(key),secured:Boolean(accessToken),selected:null,catalogAccessible:false},200,origin);
- }
- if(req.method!=='POST'||!path.endsWith('/api/generate'))return json({error:'Rota não encontrada'},404,origin);
- // Critical: both secrets must be configured. Without an access token,
- // the site must NEVER become an open paid-model proxy.
- if(accessToken.length<24)return json({error:'Configure FRAMECRAFT_ACCESS_TOKEN com ao menos 24 caracteres em Supabase > Edge Functions > Secrets.'},503,origin);
- const supplied=req.headers.get('authorization')?.replace(/^Bearer\s+/i,'')||'';
- if(!safeTokenMatch(supplied,accessToken))return json({error:'Token de acesso inválido. Configure o token no painel Conexão.'},401,origin);
- if(!key)return json({error:'Configure NVIDIA_API_KEY no Supabase Edge Functions > Secrets.'},503,origin);
- const now=Date.now();for(let i=recentCalls.length-1;i>=0;i--)if(now-recentCalls[i]>60_000)recentCalls.splice(i,1);
- if(recentCalls.length>=5)return json({error:'Limite de 5 gerações por minuto nesta instância. Tente novamente em instantes.'},429,origin);
- recentCalls.push(now);
- const raw=await req.text();
- if(raw.length>12_000)return json({error:'Solicitação acima do tamanho permitido.'},413,origin);
+ if(req.method==='GET'&&path.endsWith('/api/health'))
+  return json({status:'ok',configured:Boolean(key),auth:'supabase-email'},200,origin);
+ if(req.method==='GET'&&path.endsWith('/api/models'))
+  return json({configured:Boolean(key),requiresAuth:true,selected:null,catalogAccessible:false},200,origin);
+ if(req.method!=='POST'||!(path.endsWith('/api/enhance')||path.endsWith('/api/generate')))
+  return json({error:'Rota não encontrada.'},404,origin);
+ const action=path.endsWith('/api/enhance')?'enhance':'generate';
+ const userId=await authenticatedUser(req);
+ if(!userId)return json({error:'Entre com seu e-mail para gerar designs com a NVIDIA.'},401,origin);
+ if(!key)return json({error:'NVIDIA_API_KEY não configurada no Supabase.'},503,origin);
+ const body=await req.text();
+ if(body.length>13500)return json({error:'Solicitação grande demais.'},413,origin);
  let data:unknown;
- try{data=JSON.parse(raw)}catch{return json({error:'JSON de entrada inválido.'},400,origin)}
- if(!isInput(data))return json({error:'Informe descrição (8 a 3000 caracteres), estilo e formato válidos.'},422,origin);
+ try{data=JSON.parse(body)}catch{return json({error:'JSON inválido.'},400,origin)}
+ if(!isInput(data))return json({error:'Descrição, estilo ou formato inválido.'},422,origin);
  try{
-  const {brief,model}=await nvidiaBrief(data,key);
-  const design=composeProfessionalDesign(brief,data.prompt,data.style,data.format);
+  const quota=await takeQuota(userId,action);
+  if(!quota.allowed)return json({error:quota.reason||'Cota esgotada.'},429,origin);
+  const result=await nvidiaBrief(data,key);
+  if(action==='enhance')return json({...result,remainingToday:quota.remainingToday},200,origin);
+  const design=composeProfessionalDesign(result.brief,data.prompt,data.style,data.format);
   const issues=auditProfessionalDesign(design);
-  return json({brief,design,model,modelMode:'automatic',
-   repairs:issues.length?['A composição foi normalizada pela direção de arte.']:[]},200,origin);
+  return json({...result,design,modelMode:'automatic',remainingToday:quota.remainingToday,
+   repairs:issues.length?['Composição normalizada para melhor leitura e hierarquia.']:[]},200,origin);
  }catch(error){
-  const message=error instanceof Error?error.message:'Falha na geração';
-  console.error('FrameCraft generate:',message);
-  const status=/cota|limite/.test(message.toLowerCase())?429:502;
-  return json({error:message},status,origin);
+  const message=error instanceof Error?error.message:'Falha da geração.';
+  console.error('FrameCraft:',message);
+  return json({error:message},/cota|limite/.test(message.toLowerCase())?429:502,origin);
  }
 });

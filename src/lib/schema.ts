@@ -75,11 +75,12 @@ export const briefSchema = z.object({
 });
 export type CreativeBrief = z.infer<typeof briefSchema>;
 export const generateRequestSchema = z.object({
-  prompt: z.string().trim().min(8).max(3000),
+  prompt: z.string().trim().min(2).max(3000),
   style: z.enum(['studio','bold','editorial','minimal','playful']),
   format: z.enum(['portrait','square','story','landscape','banner']),
   previous: designSchema.optional(),
   instruction: z.string().trim().max(1200).optional(),
+  enhancedPrompt: z.string().trim().max(8500).optional(),
 });
 export type GenerateRequest = z.infer<typeof generateRequestSchema>;
 export const formats = {

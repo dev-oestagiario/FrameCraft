@@ -39,7 +39,7 @@ const designSystem=`Você é um engenheiro de design editorial e especialista em
 Tipos permitidos: text, rect, ellipse, polygon (sides:3..12), star (points:4..12,innerRatio:0.1..0.85) e line (fill:#RRGGBB,strokeWidth:1..30). Para rect e ellipse use fillEnd opcional para gradiente. Preserve exatamente nomes próprios e mensagens obrigatórias. NÃO use tipo image: imagens só podem ser inseridas pelo editor com upload. Use cores #RRGGBB exatas. Para texto, fontWeight normal|bold, fontFamily Inter|Arial|Georgia|Verdana, align left|center|right. Não use Montserrat, Poppins, Roboto, sans-serif, serif ou cores CSS como rgba(), nomes ou #RGB: transforme em #RRGGBB. Para rect inclua fill e radius (0-300), strokeWidth:0. Para ellipse inclua fill. Todos exigem id único, x,y,width,height,opacity:1,rotation:0. O layout deve ser sofisticado, sem cara de template genérico: contraste, hierarquia tipográfica marcante, camadas equilibradas, formas abstratas, cartões e CTAs quando relevantes. Use 9 a 20 elementos bem organizados. Manchetão de pelo menos 72px em post vertical de 1080px, textos menores a partir de 32px. Proibido inserir cards minúsculos com textos de 12px, áreas vazias maiores que 20% no rodapé, cores de pouco contraste ou cabeçalhos brancos sobre fundos muito claros. O texto deve caber dentro de largura e altura: linhas curtas, títulos legíveis, áreas separadas; não sobreponha elementos de texto. Crie uma arte final de alta qualidade. Sem caracteres emoji obrigatórios. Evite usar uma infinidade de cartões pequenos. O usuário quer um poster bonito, não um mockup de dashboard a menos que solicitado. Não adicione texto comercial falso. Sempre respeite dimensões do canvas e margens de pelo menos 40px. Responda só JSON.`;
 
 async function makeBrief(input:z.infer<typeof generateRequestSchema>):Promise<CreativeBrief>{
-  const message=`DESCRIÇÃO ORIGINAL: ${input.prompt}\nESTILO: ${input.style}\nFORMATO: ${formats[input.format].label}\n${input.instruction?`REVISÃO DESEJADA: ${input.instruction}`:''}\nCrie briefing aprofundado, estratégico e visualmente específico. Não introduza alegações inexistentes.\n${buildDesignGuidance(input.style,input.format)}`;
+  const message=`DESCRIÇÃO ORIGINAL: ${input.prompt}\nESTILO: ${input.style}\nFORMATO: ${formats[input.format].label}\n${input.enhancedPrompt?`DIREÇÃO DE ARTE DETALHADA REVISADA: ${input.enhancedPrompt}`:''}\n${input.instruction?`REVISÃO DESEJADA: ${input.instruction}`:''}\nCrie briefing aprofundado, estratégico e visualmente específico. Não introduza alegações inexistentes.\n${buildDesignGuidance(input.style,input.format)}`;
   let result=await chat(directionSystem,message,2300);
   let raw=result.content;
   try{return repairAiBrief(parseJSON(raw))}catch{
@@ -75,6 +75,35 @@ async function makeDesign(input:z.infer<typeof generateRequestSchema>, brief:Cre
   if(residual.length)console.warn('[design quality] revisão recomendada:',residual.join(' | '));
   return {design:validated,repairs:[`Layout reorganizado pela direção de arte profissional: ${reason.slice(0,180)||'melhoria de legibilidade e hierarquia visual'}.`]};
 }
+function expandLocalPrompt(input:z.infer<typeof generateRequestSchema>,brief:CreativeBrief):string{
+ return [
+  'DIREÇÃO DE ARTE PROFISSIONAL — FRAMECRAFT',
+  'CONTEÚDO SOLICITADO: '+input.prompt,
+  'OBJETIVO E CONCEITO: '+brief.concept+'. Evitar dados, preços, características e promessas não informadas pelo usuário.',
+  'PÚBLICO: '+brief.audience+'. Adequar voz e nível de formalidade à mensagem.',
+  'FORMATO: '+formats[input.format].width+' × '+formats[input.format].height+' pixels; estilo visual '+input.style+'. Manter margens seguras de pelo menos 7%.',
+  'CONTEÚDO EDITORIAL: manchete '+JSON.stringify(brief.headline)+'; texto auxiliar '+JSON.stringify(brief.subheadline||'omitir quando não houver')+'; chamada para ação '+JSON.stringify(brief.callToAction)+'.',
+  'COMPOSIÇÃO E RITMO: '+brief.visualDirection+'. Foco gráfico autoral, sem painéis simulados e cartões repetitivos.',
+  'HIERARQUIA E POSICIONAMENTO: '+brief.hierarchy+'. Título no topo com grande escala, apoio legível e CTA no terço inferior.',
+  'TIPOGRAFIA: '+brief.typography+'. Até duas famílias, headline dominante e texto auxiliar confortável em telas pequenas.',
+  'PALETA E ACESSIBILIDADE: '+brief.palette.join(', ')+'. Preservar contraste alto, consistência e legibilidade em miniatura.',
+  'ELEMENTOS E TÉCNICA: composição vetorial profissional com retângulos, elipses, linhas, polígonos, estrelas e gradientes discretos.',
+  'CONTROLE DE QUALIDADE: sem microtextos, cortes, sobreposição, margem irregular, CTAs deslocados, informação inventada ou excesso de espaço vazio.',
+  'SAÍDA: JSON estruturado com dimensões exatas, formas editáveis e tipografia hierarquizada.'
+ ].join('\\n\\n');
+}
+app.post('/api/enhance',async(req,res)=>{
+ try{
+  const input=generateRequestSchema.parse(req.body);
+  const brief=await makeBrief(input);
+  res.json({brief,enhancedPrompt:expandLocalPrompt(input,brief),model:nvidia.selected});
+ }catch(error){
+  if(error instanceof z.ZodError){res.status(422).json({error:'Dados inválidos',details:error.issues});return}
+  const err=error as Error & {status?:number};
+  res.status(err.status===429?429:502).json({error:err.message||'Falha ao aprimorar prompt.'});
+ }
+});
+
 const requestTracker=new Map<string,number[]>();
 app.post('/api/generate',async(req,res)=>{
   try{
