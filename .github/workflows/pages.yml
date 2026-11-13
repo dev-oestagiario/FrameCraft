@@ -61,6 +61,8 @@ jobs:
       pages: write
       id-token: write
     steps:
+      - name: Obter código para verificação pública
+        uses: actions/checkout@v4
       - name: Publicar
         id: deployment
         uses: actions/deploy-pages@v4
