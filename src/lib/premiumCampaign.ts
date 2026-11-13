@@ -48,7 +48,6 @@ export function composePremiumCampaign(
     height:Math.round(height),rotation:0,opacity:1,fontSize:Math.round(size),
     fontWeight:weight,fontFamily:font,color,align});
  };
- const brandX=horizontal?w*.075:w*.09;
  const isPoster=style==='editorial'||isFood;
  if(horizontal){
   box('fc-base',0,0,w,h,dark);
