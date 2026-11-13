@@ -25,7 +25,12 @@ export function getApiOrigin(): string {
   if (typeof window !== 'undefined') {
     try {
       const stored = window.localStorage.getItem(STORAGE_KEY);
-      if (stored !== null && (stored || !/(^|\.)github\.io$/i.test(window.location.hostname))) return stored;
+      // Migrate any cached endpoint pointing to the previous Supabase project.
+      if (stored && stored.includes('kbezscxuhqculdvraqun.supabase.co')) {
+        window.localStorage.removeItem(STORAGE_KEY);
+      } else if (stored !== null && (stored || !/(^|\.)github\.io$/i.test(window.location.hostname))) {
+        return stored;
+      }
     } catch { /* Armazenamento indisponível: utilizar configuração de build. */ }
   }
   try { return normalizeApiOrigin(buildOrigin); } catch { return ''; }
