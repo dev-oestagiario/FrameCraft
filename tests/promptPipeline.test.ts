@@ -14,7 +14,7 @@ describe('Pipeline profissional de imagem',()=>{
   expect(app).not.toContain('fc-enhanced-panel');
  });
  it('usa os mesmos contratos em Node, React e Supabase Edge',()=>{
-  expect(edgeComposer).toBe(composer);
+  expect(edgeComposer.replace("from './subjectFidelity.ts'","from './subjectFidelity'")).toBe(composer);
   expect(edgeIntent).toBe(intent);
  });
  it('aplica a identidade da peça sem expor o token NVIDIA no cliente',()=>{
