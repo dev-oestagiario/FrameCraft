@@ -164,7 +164,7 @@ Escreva qualquer descrição, escolha estilo e proporção, depois pressione **A
 
 A geração utiliza sessões do **Supabase Auth por e-mail**, não o antigo token `FRAMECRAFT_ACCESS_TOKEN`. A chave NVIDIA continua apenas em Secrets da Edge Function, sem exposição no GitHub Pages.
 
-1. Em [Supabase Auth → URL Configuration](https://supabase.com/dashboard/project/kbezscxuhqculdvraqun/auth/url-configuration), adicione `https://dev-oestagiario.github.io/FrameCraft/` às **Redirect URLs**.
+1. Em [Supabase Auth → URL Configuration](https://supabase.com/dashboard/project/dtvbphnoqkbxlwdiivvv/auth/url-configuration), adicione `https://dev-oestagiario.github.io/FrameCraft/` às **Redirect URLs**.
 2. Confirme que a autenticação por e-mail está ativa. O serviço SMTP padrão da Supabase pode ter limite de destinatários e envios; para acesso público maior, configure um provedor SMTP.
 3. Abra o [FrameCraft](https://dev-oestagiario.github.io/FrameCraft/) e clique **Entrar**. Informe seu e-mail, receba um link e clique nele para voltar ao editor.
 4. Aprimore o prompt, ajuste o texto e gere a composição.
@@ -173,7 +173,7 @@ O secret `FRAMECRAFT_ACCESS_TOKEN` antigo pode permanecer salvo no Supabase, mas
 
 ### Backend e cotas
 
-Edge Function: `https://kbezscxuhqculdvraqun.supabase.co/functions/v1/framecraft-api`
+Edge Function: `https://dtvbphnoqkbxlwdiivvv.supabase.co/functions/v1/framecraft-api`
 
 - `GET /api/health` — status do backend e NVIDIA
 - `GET /api/models` — disponibilidade sem divulgar credenciais
@@ -262,3 +262,11 @@ npm ci
 GITHUB_PAGES=true npm run build
 node scripts/verify-pages-build.mjs
 ```
+
+## Migração do backend para o projeto FrameCraft
+
+Projeto Supabase de destino: `dtvbphnoqkbxlwdiivvv` (`https://dtvbphnoqkbxlwdiivvv.supabase.co`). A aplicação React utiliza sua chave **publishable** pública para login e a Edge Function `framecraft-api` para gerar prompts e layouts. Sessões do projeto anterior não são transferidas: cada usuário deve entrar por e-mail novamente.
+
+A função foi publicada no projeto novo e a tabela de cotas foi criada em `private.framecraft_ai_requests`, com acesso somente ao servidor. O antigo projeto não é excluído.
+
+A chave `NVIDIA_API_KEY` é um segredo configurado **por projeto** e deve ser adicionada em https://supabase.com/dashboard/project/dtvbphnoqkbxlwdiivvv/functions/secrets. Configure também a URL de redirecionamento da autenticação em https://supabase.com/dashboard/project/dtvbphnoqkbxlwdiivvv/auth/url-configuration. O GitHub Pages aponta diretamente à nova função HTTPS; a variável legada `FRAMECRAFT_API_URL` não pode mais substituir automaticamente o endereço.

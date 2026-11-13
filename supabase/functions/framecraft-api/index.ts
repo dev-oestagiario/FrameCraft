@@ -24,7 +24,7 @@ const json=(body:unknown,status=200,origin?:string|null)=>{
  }
  return new Response(JSON.stringify(body),{status,headers});
 };
-const SB_URL=Deno.env.get('SUPABASE_URL')||'https://kbezscxuhqculdvraqun.supabase.co';
+const SB_URL=Deno.env.get('SUPABASE_URL')||'https://dtvbphnoqkbxlwdiivvv.supabase.co';
 const ANON_KEY=Deno.env.get('SUPABASE_ANON_KEY')||'';
 const SERVICE_KEY=Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')||'';
 async function authenticatedUser(req:Request):Promise<string|null>{

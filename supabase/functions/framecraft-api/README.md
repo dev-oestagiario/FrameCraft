@@ -1,8 +1,8 @@
 # Backend HTTPS — FrameCraft
 
-Projeto Supabase Dev: `kbezscxuhqculdvraqun`.
+Projeto Supabase FrameCraft (conexão Dev): `dtvbphnoqkbxlwdiivvv`.
 
-Função pública de transporte: `https://kbezscxuhqculdvraqun.supabase.co/functions/v1/framecraft-api`. Ela **não é um proxy aberto**: a geração exige login Supabase Auth por e-mail confirmado e passa por controle de cota transacional no banco antes de consumir a NVIDIA.
+Função pública de transporte: `https://dtvbphnoqkbxlwdiivvv.supabase.co/functions/v1/framecraft-api`. Ela **não é um proxy aberto**: a geração exige login Supabase Auth por e-mail confirmado e passa por controle de cota transacional no banco antes de consumir a NVIDIA.
 
 ## Credenciais
 
@@ -47,3 +47,7 @@ O backend é implantado pelo Supabase MCP na função `framecraft-api`, com aute
 O frontend é publicado separadamente via GitHub Pages Actions. Editar o código nesta pasta não faz deploy do backend automaticamente.
 
 A produção visual atual gera **JSON editável e arte vetorial**, não fotos geradas por modelos de difusão.
+
+## Migração do projeto
+
+O projeto anterior continua separado e não recebe novas solicitações do FrameCraft. Na conta nova, configure `NVIDIA_API_KEY` em Edge Function Secrets para ativar a geração. A integração do GitHub Pages usa a URL deste projeto. A autenticação por e-mail requer Redirect URL `https://dev-oestagiario.github.io/FrameCraft/` em Auth → URL Configuration.

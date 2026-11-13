@@ -1,9 +1,9 @@
 /** Passwordless email session using Supabase Auth REST.
  * Uses a PUBLIC publishable API key; NVIDIA credentials stay in Supabase Edge secrets.
  */
-export const AUTH_URL='https://kbezscxuhqculdvraqun.supabase.co';
-const API_KEY='sb_publishable_bBrc7qFAOpSliVbpNSQ1tQ_a8h29gVf';
-const STORE='framecraft.auth.v1';
+export const AUTH_URL='https://dtvbphnoqkbxlwdiivvv.supabase.co';
+const API_KEY='sb_publishable_cSZm04y5hoZhfS_AaHl6jA_M8l0qTom';
+const STORE='framecraft.auth.dtvbphnoqkbxlwdiivvv.v1';
 export type AuthSession={
  access_token:string;refresh_token:string;expires_at:number;
  user:{id:string;email:string};
