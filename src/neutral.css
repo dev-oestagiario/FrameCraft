@@ -427,3 +427,15 @@ html[data-framecraft-theme] .fc-api-feedback{
 html[data-framecraft-theme] .fc-auth-error{
  color:#b4233a!important;background:var(--fc-raised)!important;border-color:#b4233a!important;
 }
+
+/* Real visual generation: optional local reference image, no extra wizard. */
+.app-shell .fc-render-controls{display:grid;gap:8px;margin:7px 0 13px}
+.app-shell .fc-render-controls .fc-option{gap:7px}
+.app-shell .fc-hero-upload{padding:8px 10px 10px;background:var(--fc-soft);border:1px solid var(--fc-border);border-radius:10px}
+.app-shell .fc-hero-upload>p{margin:7px 0 0;font-size:11px;line-height:1.55;color:var(--fc-muted)}
+.app-shell .fc-hero-pick{width:100%;display:flex;gap:8px;align-items:center;justify-content:center;min-height:34px;background:var(--fc-raised);border:1px dashed var(--fc-border);border-radius:8px;color:var(--fc-text);font-weight:600;font-size:11px}
+.app-shell .fc-hero-pick:hover{background:var(--fc-hover);border-color:var(--fc-muted)}
+.app-shell .fc-hero-preview{position:relative;width:100%;height:96px;border-radius:8px;overflow:hidden;margin-top:9px;border:1px solid var(--fc-border)}
+.app-shell .fc-hero-preview img{height:100%;width:100%;object-fit:cover;object-position:center}
+.app-shell .fc-hero-preview button{position:absolute;top:6px;right:6px;border:0;border-radius:7px;background:rgba(0,0,0,.75);color:#fff;width:27px;height:27px;display:flex;align-items:center;justify-content:center}
+@media(max-width:760px){.app-shell .fc-render-controls{gap:7px}.app-shell .fc-hero-upload{padding:10px}}

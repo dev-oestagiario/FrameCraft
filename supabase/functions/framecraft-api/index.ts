@@ -5,6 +5,7 @@
  */
 import {auditProfessionalDesign,composeProfessionalDesign,type PosterBrief,type PosterStyle,type PosterFormat} from './proComposer.ts';
 import {extractArtIntent,enforceSubjectFidelity} from './subjectFidelity.ts';
+import {generateNvidiaHero,VISUAL_MODEL} from './visualImage.ts';
 
 const ALLOWED_ORIGINS=new Set([
  'https://dev-oestagiario.github.io','http://localhost:5173','http://127.0.0.1:5173'
@@ -122,7 +123,7 @@ function isInput(data:unknown):data is GenerateInput{
 }
 async function nvidiaBrief(input:GenerateInput,apiKey:string):Promise<{brief:PosterBrief&Record<string,unknown>;enhancedPrompt:string;model:string}>{
  const intent=extractArtIntent(input.originalPrompt||input.prompt,input.prompt);
- const system=`Você é um diretor de arte sênior de um estúdio internacional. Converta uma descrição informal em briefing estratégico e um plano visual altamente específico. Sua resposta é APENAS UM JSON com os campos: concept, audience, headline, subheadline, visualDirection, typography, palette (lista de cores #RRGGBB), hierarchy, imagePrompt, callToAction, enhancedPrompt, heroElement, brand, subject, mustInclude, renderIntent. REGRA PRIORITÁRIA: preservar marca e sujeito original. Pedido de banner do PS5 exige PS5/PlayStation 5 em copy, hero e briefing — mesmo que o usuário peça abstração e proíba fotografia. Não substituir PS5 por 'gaming', 'performance' ou formas sem ligação ao tema. Um banner de campanha precisa de um elemento hero reconhecível, escala dramática, espaço negativo intencional e informação fiel; não usar o mesmo template universal. O campo enhancedPrompt deve conter entre 900 e 3500 caracteres de direção de arte aprofundada em português brasileiro com seções OBJETIVO, PÚBLICO, COPY, FORMATO, GRID, ALINHAMENTO, MARGENS, TIPOGRAFIA, PALETA, CONTRASTE, ELEMENTOS VETORIAIS, ACABAMENTO, RESTRIÇÕES, PRODUÇÃO E CONTROLE DE QUALIDADE. Especifique os elementos e sua distribuição, sem inventar fatos. O headline deve ser curto (ideal 25-55 caracteres), contendo a promessa real mais importante, sem inventar marcas nem dados. O subheadline deve ter no máximo 110 caracteres. A direção visual descreve composição autoral, contraste acessível, ritmo, proporção, elementos gráficos geométricos, área segura, dimensões e tipografia. Nunca invente preços, avaliações, desconto, 'grátis' ou funcionalidade não declarada. Evite UI falsa, microtextos, listas densas, pequenos cartões e áreas vazias excessivas. Use português do Brasil. Forme um único foco visual. Represente apenas texto, formas e geometria porque o renderizador não cria fotografias. Entregue JSON, não código ou Markdown.`;
+ const system=`Você é um diretor de arte sênior de um estúdio internacional. Converta uma descrição informal em briefing estratégico e um plano visual altamente específico. Sua resposta é APENAS UM JSON com os campos: concept, audience, headline, subheadline, visualDirection, typography, palette (lista de cores #RRGGBB), hierarchy, imagePrompt, callToAction, enhancedPrompt, heroElement, brand, subject, mustInclude, renderIntent. REGRA PRIORITÁRIA: preservar marca e sujeito original. Pedido de banner do PS5 exige PS5/PlayStation 5 em copy, hero e briefing — mesmo que o usuário peça abstração e proíba fotografia. Não substituir PS5 por 'gaming', 'performance' ou formas sem ligação ao tema. Um banner de campanha precisa de um elemento hero reconhecível, escala dramática, espaço negativo intencional e informação fiel; não usar o mesmo template universal. O campo enhancedPrompt deve conter entre 900 e 3500 caracteres de direção de arte aprofundada em português brasileiro com seções OBJETIVO, PÚBLICO, COPY, FORMATO, GRID, ALINHAMENTO, MARGENS, TIPOGRAFIA, PALETA, CONTRASTE, ELEMENTOS VETORIAIS, ACABAMENTO, RESTRIÇÕES, PRODUÇÃO E CONTROLE DE QUALIDADE. Especifique os elementos e sua distribuição, sem inventar fatos. O headline deve ser curto (ideal 25-55 caracteres), contendo a promessa real mais importante, sem inventar marcas nem dados. O subheadline deve ter no máximo 110 caracteres. A direção visual descreve composição autoral, contraste acessível, ritmo, proporção, elementos gráficos geométricos, área segura, dimensões e tipografia. Nunca invente preços, avaliações, desconto, 'grátis' ou funcionalidade não declarada. Evite UI falsa, microtextos, listas densas, pequenos cartões e áreas vazias excessivas. Use português do Brasil. Forme um único foco visual. Quando a saída for imagem visual, a direção artística também será enviada a um modelo específico de geração de pixels. Preserve o objeto principal e indique iluminação, textura e acabamento de campanha. Textos continuarão como camadas editáveis fora da imagem. Entregue JSON, não código ou Markdown.`;
  const user=`SOLICITAÇÃO ORIGINAL INALTERÁVEL: ${input.originalPrompt||input.prompt}\nASSUNTO OBRIGATÓRIO: ${intent.subject}\nMARCA: ${intent.brand||'não especificada'}\nINCLUIR: ${intent.mustInclude.join(', ')}\nINTENÇÃO VISUAL: ${intent.renderIntent}\nDESCRIÇÃO DO USUÁRIO: ${input.prompt}\nESTILO: ${input.style}\nFORMATO: ${input.format}\nREVISÃO: ${input.instruction||'primeira criação'}\n${input.enhancedPrompt?`PROMPT EDITADO PELO USUÁRIO: ${input.enhancedPrompt.slice(0,8500)}`:''}\nFaça a direção de arte profissional obedecendo ao conteúdo solicitado.`;
  const preferred=Deno.env.get('NVIDIA_MODEL');
  const candidates=[...(preferred&&preferred!=='auto'?[preferred]:[]),...FREE_TRIAL_MODELS];
@@ -170,8 +171,8 @@ Deno.serve(async(req:Request)=>{
  if(req.method==='GET'&&path.endsWith('/api/health'))
   return json({status:'ok',configured:Boolean(key),auth:'supabase-email'},200,origin);
  if(req.method==='GET'&&path.endsWith('/api/models'))
-  return json({configured:Boolean(key),requiresAuth:true,selected:null,catalogAccessible:false},200,origin);
- if(req.method!=='POST'||!(path.endsWith('/api/enhance')||path.endsWith('/api/generate')))
+  return json({configured:Boolean(key),requiresAuth:true,selected:null,catalogAccessible:false,visualModel:VISUAL_MODEL,visualAvailability:'not_verified'},200,origin);
+ if(req.method!=='POST'||!(path.endsWith('/api/enhance')||path.endsWith('/api/generate')||path.endsWith('/api/generate-visual')))
   return json({error:'Rota não encontrada.'},404,origin);
  const action=path.endsWith('/api/enhance')?'enhance':'generate';
  const userId=await authenticatedUser(req);
@@ -187,6 +188,12 @@ Deno.serve(async(req:Request)=>{
   if(!quota.allowed)return json({error:quota.reason||'Cota esgotada.'},429,origin);
   const result=await nvidiaBrief(data,key);
   if(action==='enhance')return json({...result,remainingToday:quota.remainingToday},200,origin);
+  if(path.endsWith('/api/generate-visual')){
+   // An actual image generator, never a circle/rectangle fallback.
+   const hero=await generateNvidiaHero(data,result.brief,key);
+   return json({...result,hero,remainingToday:quota.remainingToday,
+     modelMode:'visual-image',repairs:[]},200,origin);
+  }
   const source=data.originalPrompt||data.prompt;
   const intent=extractArtIntent(source,data.prompt);
   const design=composeProfessionalDesign(result.brief,data.prompt,data.style,data.format,source);

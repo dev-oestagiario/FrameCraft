@@ -16,3 +16,6 @@ Fonte de verdade: `src/lib/proComposer.ts` e `src/lib/subjectFidelity.ts`. Ao mu
 Qualidade: design estruturado deve passar em Zod + auditoria semântica; redesenhar um template não substitui renderizar e revisar. Os paths SVG são dados restritos, nunca HTML executável.
 O Hyperframes é um framework de vídeo: adaptar técnicas de composição e frame.md, NÃO alegar que o app usa seu renderizador de vídeo para criar PNGs.
 Execute `npm run typecheck`, `npm test`, `npm run build`; validar o workflow do Pages. Se não conseguir verificar, informe a limitação. Nunca versionar `.env` ou tokens privados.
+
+## Geração visual premium
+Leia .agents/skills/framecraft-visual-image-generation/SKILL.md. Nunca confunda LLM que escreve JSON com modelo que gera imagem. O endpoint visual NVIDIA usa FLUX.1 Schnell e depende de autorização/cota. A UI deve reportar falhas explicitamente e permitir usar foto enviada sem enviá-la ao modelo de imagem. Compositor híbrido preserva camadas editáveis e Zod. Mantenha arquivos no GitHub sincronizados com o Supabase.

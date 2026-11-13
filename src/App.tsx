@@ -10,6 +10,7 @@ import {useStudio} from './store/useStudio';
 import {CanvasEditor} from './components/CanvasEditor';
 import {analyzeLayout} from './lib/designQuality';
 import {auditProfessionalDesign} from './lib/proComposer';
+import {composePremiumCampaign} from './lib/premiumCampaign';
 import {apiUrl,isPagesWithoutApi,API_CHANGED_EVENT} from './lib/apiConnection';
 import {ApiSettingsDialog} from './components/ApiSettingsDialog';
 import {AuthDialog} from './components/AuthDialog';
@@ -53,7 +54,7 @@ function Inspector({onClose}:{onClose:()=>void}){
   }
   addElement(el);
  }
- async function addImage(f:File|undefined){if(!f)return;try{const src=await readImage(f);addElement({type:'image',id:id(),x:140,y:260,width:420,height:360,src,rotation:0,opacity:1})}catch(err){alert(err instanceof Error?err.message:'Imagem inválida')}}
+ async function addImage(f:File|undefined){if(!f)return;try{const src=await readImage(f);addElement({type:'image',id:id(),x:140,y:260,width:420,height:360,src,fit:'cover',rotation:0,opacity:1})}catch(err){alert(err instanceof Error?err.message:'Imagem inválida')}}
  function update(patch:Partial<DesignElement>){if(selected)patchElement(selected.id,patch)}
  return <aside className="inspector">
   <div className="side-heading"><div><h3>Editar design</h3></div><button type="button" className="fc-icon-button" title="Fechar painel" aria-label="Fechar editor de elementos" onClick={onClose}><X size={17}/></button></div>
@@ -106,6 +107,9 @@ function GeneratePanel({onConfigureApi,onSignIn,session}:{onConfigureApi:()=>voi
  const [originalPrompt,setOriginalPrompt]=useState('');
  const [style,setStyle]=useState<GenerateRequest['style']>('studio');
  const [format,setFormat]=useState<GenerateRequest['format']>('portrait');
+ const [renderMode,setRenderMode]=useState<'visual'|'vector'>('visual');
+ const [uploadedHero,setUploadedHero]=useState<string|null>(null);
+ const heroFileInput=useRef<HTMLInputElement>(null);
  const [revision,setRevision]=useState('');
  const [showRevision,setShowRevision]=useState(false);
  const [connected,setConnected]=useState(false);
@@ -125,6 +129,11 @@ function GeneratePanel({onConfigureApi,onSignIn,session}:{onConfigureApi:()=>voi
  }
  useEffect(()=>{void checkModels();const listener=()=>{void checkModels()};window.addEventListener(API_CHANGED_EVENT,listener);return()=>window.removeEventListener(API_CHANGED_EVENT,listener)},[]);
 
+ async function selectHero(file:File|undefined){
+   if(!file)return;
+   try{const src=await readImage(file);setUploadedHero(src);setError(null)}
+   catch(error){setError(error instanceof Error?error.message:'Não foi possível abrir a imagem.')}
+ }
  async function enhance(){
    if(!session){onSignIn();return}
    if(apiUnconfigured){setError('Backend HTTPS não está conectado.');return}
@@ -155,12 +164,30 @@ function GeneratePanel({onConfigureApi,onSignIn,session}:{onConfigureApi:()=>voi
    try{
      const token=await auth.getToken();
      if(!token){onSignIn();return}
-     const request={prompt,originalPrompt:originalPrompt||undefined,style,format,...(useRevision?{instruction:revision}:{} )};
-     const r=await fetch(apiUrl('generate'),{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+token},body:JSON.stringify(request)});
-     const response=await r.json() as {brief?:CreativeBrief,design?:Design,error?:string,model?:string,repairs?:string[],enhancedPrompt?:string};
-     if(!r.ok||!response.brief||!response.design)throw new Error(response.error||`HTTP ${r.status}: erro na geração`);
-     const validated=designSchema.parse(response.design);setBrief(response.brief);setDesign(validated);
-     // The professional art direction remains editable in the primary text field.
+     const request={prompt,originalPrompt:originalPrompt||undefined,style,format,
+       ...(useRevision?{instruction:revision}:{} )};
+     // The visual provider creates actual image pixels. The vector engine is
+     // still available explicitly; never silently replace a failed hero with shapes.
+     const endpoint=renderMode==='visual'&&!uploadedHero?'generate-visual':'generate';
+     const r=await fetch(apiUrl(endpoint),{method:'POST',
+       headers:{'Content-Type':'application/json',Authorization:'Bearer '+token},
+       body:JSON.stringify(request)});
+     const response=await r.json() as {brief?:CreativeBrief,design?:Design,
+       hero?:{src?:string;model?:string},error?:string,model?:string,repairs?:string[]};
+     if(!r.ok||!response.brief)throw new Error(response.error||`HTTP ${r.status}: erro na geração`);
+     const source=originalPrompt||prompt;
+     let result:Design;
+     if(renderMode==='visual'){
+       const hero=uploadedHero||response.hero?.src;
+       if(!hero)throw new Error('Nenhuma imagem foi retornada. Envie uma foto ou selecione o modo vetorial.');
+       result=composePremiumCampaign(response.brief,source,format,style,hero,
+         uploadedHero?'uploaded':'generated');
+     }else{
+       if(!response.design)throw new Error('O motor vetorial não retornou o documento JSON.');
+       result=designSchema.parse(response.design);
+     }
+     const validated=designSchema.parse(result);
+     setBrief(response.brief);setDesign(validated);
      setRepairMessages(Array.isArray(response.repairs)?response.repairs:[]);
      setShowRevision(false);setRevision('');
    }catch(e){setError(e instanceof Error?e.message:'Falha na geração')}
@@ -174,9 +201,31 @@ function GeneratePanel({onConfigureApi,onSignIn,session}:{onConfigureApi:()=>voi
      <label className="fc-option"><span>Estilo</span><div className="select-wrap"><select aria-label="Estilo visual" value={style} onChange={e=>setStyle(e.target.value as GenerateRequest['style'])}>{styles.map(([value,label])=><option value={value} key={value}>{label}</option>)}</select><ChevronDown size={15}/></div></label>
      <label className="fc-option"><span>Formato</span><div className="select-wrap"><select aria-label="Formato da imagem" value={format} onChange={e=>setFormat(e.target.value as GenerateRequest['format'])}>{sizes.map(([value,label])=><option value={value} key={value}>{label}</option>)}</select><ChevronDown size={15}/></div></label>
     </div>
+    <div className="fc-render-controls">
+      <label className="fc-option"><span>Tipo de criação</span>
+        <div className="select-wrap"><select aria-label="Tipo de criação" value={renderMode}
+          onChange={e=>setRenderMode(e.target.value as 'visual'|'vector')}>
+          <option value="visual">Imagem profissional (IA)</option>
+          <option value="vector">Somente vetor editável</option>
+        </select><ChevronDown size={15}/></div>
+      </label>
+      {renderMode==='visual'&&<div className="fc-hero-upload">
+        <input ref={heroFileInput} type="file" accept="image/jpeg,image/png,image/webp" className="hidden"
+          onChange={e=>{void selectHero(e.target.files?.[0]);e.target.value=''}}/>
+        <button className="fc-hero-pick" type="button" onClick={()=>heroFileInput.current?.click()}>
+          <ImagePlus size={16}/>{uploadedHero?'Trocar foto do produto':'Usar minha foto (opcional)'}
+        </button>
+        {uploadedHero&&<div className="fc-hero-preview">
+          <img src={uploadedHero} alt="Imagem selecionada para a campanha"/>
+          <button type="button" onClick={()=>setUploadedHero(null)} aria-label="Remover imagem"><X size={15}/></button>
+        </div>}
+        <p>{uploadedHero?'A foto enviada será o elemento visual central. Textos continuam editáveis.':
+          'A NVIDIA cria o visual do produto; o editor monta títulos e chamada em camadas separadas.'}</p>
+      </div>}
+    </div>
     <button type="button" className="fc-enhance-btn" disabled={loading||enhancing} onClick={()=>void enhance()}>{enhancing?<><span className="spinner"/> Detalhando a direção de arte...</>:<><WandSparkles size={17}/> Aprimorar meu prompt com IA <ArrowRight size={16}/></>}</button>
-    <button className="generate-btn" disabled={loading||enhancing} onClick={()=>void generate()}>{loading?<><span className="spinner"/> Criando design...</>:<><Sparkles size={18}/> Gerar minha imagem <ArrowRight size={17}/></>}</button>
-    {loading&&<p className="busy-caption">Aplicando a direção de arte e preparando o JSON editável.</p>}
+    <button className="generate-btn" disabled={loading||enhancing} onClick={()=>void generate()}>{loading?<><span className="spinner"/> Criando a campanha...</>:<><Sparkles size={18}/> Gerar minha imagem <ArrowRight size={17}/></>}</button>
+    {loading&&<p className="busy-caption">{renderMode==='visual'?'Gerando a imagem do produto e montando a campanha editável.':'Gerando a composição vetorial editável.'}</p>}
     {error&&<div className="error-box" role="alert"><CircleHelp size={17}/><span>{error}</span><button type="button" aria-label="Fechar erro" onClick={()=>setError(null)}><X size={16}/></button></div>}
     {repairMessages.length>0&&<details className="repair-notice"><summary><Check size={15}/> Design gerado com {repairMessages.length} ajuste(s) automático(s)</summary><ul>{repairMessages.slice(0,12).map((item,i)=><li key={i}>{item}</li>)}</ul></details>}
     {!connected&&<div className="fc-inline-alert" role="status"><CircleHelp size={15}/><span>{apiOffline?'O servidor de IA está indisponível.':apiUnconfigured?'Conecte o backend para gerar imagens.':'A NVIDIA não está configurada.'}</span><button type="button" onClick={onConfigureApi}>Configurar</button></div>}
@@ -190,7 +239,7 @@ function GeneratePanel({onConfigureApi,onSignIn,session}:{onConfigureApi:()=>voi
 
  </aside>
 }
-function HelpDialog({close}:{close:()=>void}){return <div className="modal-backdrop" onMouseDown={close}><div className="modal" onMouseDown={e=>e.stopPropagation()}><div className="modal-top"><h3>Como usar o AI Image Studio</h3><button onClick={close}><X size={20}/></button></div><p>Escreva livremente o que pretende criar, escolha o estilo e o formato e clique em <strong>Aprimorar meu prompt com IA</strong>. A NVIDIA transforma sua descrição em uma direção de arte detalhada, que você pode editar antes de clicar em <strong>Gerar minha imagem</strong>.</p><p>Para usar a IA no site público, entre por um link enviado ao seu e-mail. Nenhum token privado precisa ser informado.</p><p>Selecione os elementos para arrastar, redimensionar, girar e alterar as propriedades. Você também pode importar JSON, inserir imagens do computador e exportar PNG, WebP e JSON.</p><p>O editor de composição não produz fotografias por si só. Para gerar imagens fotográficas ou ilustrações, utilize um motor generativo separado (por exemplo, ComfyUI), depois importe o arquivo como camada.</p><div className="modal-links"><a href="https://build.nvidia.com/" target="_blank" rel="noreferrer">Obter chave NVIDIA <ArrowRight size={15}/></a><a href="https://github.com/Comfy-Org/ComfyUI" target="_blank" rel="noreferrer">ComfyUI <ArrowRight size={15}/></a></div><button className="generate-btn" onClick={close}>Entendi</button></div></div>}
+function HelpDialog({close}:{close:()=>void}){return <div className="modal-backdrop" onMouseDown={close}><div className="modal" onMouseDown={e=>e.stopPropagation()}><div className="modal-top"><h3>Como usar o AI Image Studio</h3><button onClick={close}><X size={20}/></button></div><p>Escreva livremente o que pretende criar, escolha o estilo e o formato e clique em <strong>Aprimorar meu prompt com IA</strong>. A NVIDIA transforma sua descrição em uma direção de arte detalhada, que você pode editar antes de clicar em <strong>Gerar minha imagem</strong>.</p><p>Para usar a IA no site público, entre por um link enviado ao seu e-mail. Nenhum token privado precisa ser informado.</p><p>Selecione os elementos para arrastar, redimensionar, girar e alterar as propriedades. Você também pode importar JSON, inserir imagens do computador e exportar PNG, WebP e JSON.</p><p>No modo Imagem profissional, a NVIDIA gera o hero visual com FLUX.1 Schnell e o editor compõe textos e chamadas editáveis. Se o endpoint não estiver disponível para sua conta, é possível usar uma foto enviada ou selecionar o modo vetorial.</p><div className="modal-links"><a href="https://build.nvidia.com/" target="_blank" rel="noreferrer">Obter chave NVIDIA <ArrowRight size={15}/></a><a href="https://github.com/Comfy-Org/ComfyUI" target="_blank" rel="noreferrer">ComfyUI <ArrowRight size={15}/></a></div><button className="generate-btn" onClick={close}>Entendi</button></div></div>}
 function App(){
  const {design,setDesign,selectedId,undo,redo,undoStack,redoStack,loading}=useStudio();
  const layoutIssues=useMemo(()=>[...new Set([...analyzeLayout(design),...auditProfessionalDesign(design)])],[design]);
