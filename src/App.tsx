@@ -3,7 +3,7 @@ import type {ReactNode} from 'react';
 import {auth,type AuthSession} from './lib/auth';
 import {ArrowRight,Check,ChevronDown,ChevronRight,Circle,CircleHelp,Download,FileImage,FileJson,ImagePlus,Layers,LayoutTemplate,Maximize2,Minus,Plus,Redo2,RotateCcw,Send,Settings2,Shapes,Sparkles,Trash2,Type,Undo2,Upload,WandSparkles,X,Focus,UserRound,Sun,Moon,Ellipsis,PanelRightClose,PanelRightOpen} from 'lucide-react';
 import type {DesignElement,CreativeBrief,GenerateRequest,Design} from './lib/schema';
-import {designSchema,formats} from './lib/schema';
+import {designSchema} from './lib/schema';
 import {saveJSON,readDesign,readImage} from './lib/file';
 import {qaHub,templateOptions} from './data/templates';
 import {useStudio} from './store/useStudio';
