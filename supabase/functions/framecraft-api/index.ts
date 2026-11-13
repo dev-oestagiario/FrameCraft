@@ -4,6 +4,7 @@
  * Generation requires verified Supabase email sessions with database-enforced quotas.
  */
 import {auditProfessionalDesign,composeProfessionalDesign,type PosterBrief,type PosterStyle,type PosterFormat} from './proComposer.ts';
+import {extractArtIntent,enforceSubjectFidelity} from './subjectFidelity.ts';
 
 const ALLOWED_ORIGINS=new Set([
  'https://dev-oestagiario.github.io','http://localhost:5173','http://127.0.0.1:5173'
@@ -48,12 +49,16 @@ async function takeQuota(uid:string,action:'enhance'|'generate'):Promise<{allowe
  return await res.json() as {allowed:boolean;reason?:string;remainingToday?:number};
 }
 function detailedPrompt(input:GenerateInput,brief:PosterBrief,raw:Record<string,unknown>):string{
+ const original=input.originalPrompt||input.prompt;
+ const intent=extractArtIntent(original,input.prompt);
  const direct=typeof raw.enhancedPrompt==='string'?raw.enhancedPrompt.trim():'';
- if(direct.length>=650&&direct.length<=8500)return direct;
+ if(direct.length>=650&&direct.length<=8500)return enforceSubjectFidelity(input.prompt,direct,original);
  const dims={portrait:'1080×1350',square:'1080×1080',story:'1080×1920',landscape:'1920×1080',banner:'1200×630'}[input.format];
  return [
   'DIREÇÃO DE ARTE PROFISSIONAL / FRAMECRAFT',
-  'CONTEXTO ORIGINAL: '+input.prompt,
+  'CONTEXTO ORIGINAL: '+original,
+  'ASSUNTO OBRIGATÓRIO: '+intent.subject+'. MARCA: '+intent.brand+'. Não trocar por abstrações genéricas.',
+  'INTENÇÃO: '+intent.renderIntent+'. HERO: '+(brief.heroElement||'elemento visual que representa inequivocamente o produto')+'.',
   'OBJETIVO: '+brief.concept+'. Não criar fatos, funcionalidades, preços nem promessas que não estejam no pedido.',
   'PÚBLICO E TOM: '+String((brief as Record<string,unknown>).audience||'Público interessado na mensagem')+'. Redação clara e adequada à marca.',
   'TELA E FORMATO: '+dims+' pixels; estilo '+input.style+'; respeitar margem segura de 7% em todos os lados.',
@@ -83,6 +88,7 @@ function text(value:unknown,defaultValue:string,max:number):string{
  return (v||defaultValue).slice(0,max);
 }
 function safeBrief(raw:Record<string,unknown>,request:string):PosterBrief&Record<string,unknown>{
+ const intent=extractArtIntent(request);
  const stripped=request.replace(/\s+/g,' ').trim();
  const palette=(Array.isArray(raw.palette)?raw.palette:[]).filter((c):c is string=>typeof c==='string'&&/^#[a-f\d]{6}$/i.test(c)).slice(0,6);
  const cta=text(raw.callToAction,'Saiba mais',65);
@@ -98,21 +104,26 @@ function safeBrief(raw:Record<string,unknown>,request:string):PosterBrief&Record
   hierarchy:text(raw.hierarchy,'Título dominante, mensagem breve, foco gráfico e CTA.',320),
   imagePrompt:text(raw.imagePrompt,'',700),
   callToAction:invalidFreeClaim?'Saiba mais':cta,
+  subject:intent.subject,brand:intent.brand,renderIntent:intent.renderIntent,
+  mustInclude:intent.mustInclude,heroElement:text(raw.heroElement,
+     intent.kind==='console'?'silhueta vetorial reconhecível do console solicitado':'elemento principal relacionado ao tema',240),
  };
 }
-type GenerateInput={prompt:string;style:PosterStyle;format:PosterFormat;instruction?:string;enhancedPrompt?:string};
+type GenerateInput={prompt:string;style:PosterStyle;format:PosterFormat;instruction?:string;enhancedPrompt?:string;originalPrompt?:string};
 function isInput(data:unknown):data is GenerateInput{
  if(!data||typeof data!=='object')return false;
  const obj=data as Record<string,unknown>;
- return typeof obj.prompt==='string'&&obj.prompt.trim().length>=2&&obj.prompt.length<=3000
+ return typeof obj.prompt==='string'&&obj.prompt.trim().length>=2&&obj.prompt.length<=8500
   &&['studio','bold','editorial','minimal','playful'].includes(String(obj.style))
   &&['portrait','square','story','landscape','banner'].includes(String(obj.format))
   &&(obj.instruction===undefined||(typeof obj.instruction==='string'&&obj.instruction.length<=1200))
-  &&(obj.enhancedPrompt===undefined||(typeof obj.enhancedPrompt==='string'&&obj.enhancedPrompt.length<=8500));
+  &&(obj.enhancedPrompt===undefined||(typeof obj.enhancedPrompt==='string'&&obj.enhancedPrompt.length<=8500))
+  &&(obj.originalPrompt===undefined||(typeof obj.originalPrompt==='string'&&obj.originalPrompt.length<=3000));
 }
 async function nvidiaBrief(input:GenerateInput,apiKey:string):Promise<{brief:PosterBrief&Record<string,unknown>;enhancedPrompt:string;model:string}>{
- const system=`Você é um diretor de arte sênior de um estúdio internacional. Converta uma descrição informal em briefing estratégico e um plano visual altamente específico. Sua resposta é APENAS UM JSON com os campos: concept, audience, headline, subheadline, visualDirection, typography, palette (lista de cores #RRGGBB), hierarchy, imagePrompt, callToAction, enhancedPrompt. O campo enhancedPrompt deve conter entre 900 e 3500 caracteres de direção de arte aprofundada em português brasileiro com seções OBJETIVO, PÚBLICO, COPY, FORMATO, GRID, ALINHAMENTO, MARGENS, TIPOGRAFIA, PALETA, CONTRASTE, ELEMENTOS VETORIAIS, ACABAMENTO, RESTRIÇÕES, PRODUÇÃO E CONTROLE DE QUALIDADE. Especifique os elementos e sua distribuição, sem inventar fatos. O headline deve ser curto (ideal 25-55 caracteres), contendo a promessa real mais importante, sem inventar marcas nem dados. O subheadline deve ter no máximo 110 caracteres. A direção visual descreve composição autoral, contraste acessível, ritmo, proporção, elementos gráficos geométricos, área segura, dimensões e tipografia. Nunca invente preços, avaliações, desconto, 'grátis' ou funcionalidade não declarada. Evite UI falsa, microtextos, listas densas, pequenos cartões e áreas vazias excessivas. Use português do Brasil. Forme um único foco visual. Represente apenas texto, formas e geometria porque o renderizador não cria fotografias. Entregue JSON, não código ou Markdown.`;
- const user=`DESCRIÇÃO DO USUÁRIO: ${input.prompt}\nESTILO: ${input.style}\nFORMATO: ${input.format}\nREVISÃO: ${input.instruction||'primeira criação'}\n${input.enhancedPrompt?`PROMPT EDITADO PELO USUÁRIO: ${input.enhancedPrompt.slice(0,8500)}`:''}\nFaça a direção de arte profissional obedecendo ao conteúdo solicitado.`;
+ const intent=extractArtIntent(input.originalPrompt||input.prompt,input.prompt);
+ const system=`Você é um diretor de arte sênior de um estúdio internacional. Converta uma descrição informal em briefing estratégico e um plano visual altamente específico. Sua resposta é APENAS UM JSON com os campos: concept, audience, headline, subheadline, visualDirection, typography, palette (lista de cores #RRGGBB), hierarchy, imagePrompt, callToAction, enhancedPrompt, heroElement, brand, subject, mustInclude, renderIntent. REGRA PRIORITÁRIA: preservar marca e sujeito original. Pedido de banner do PS5 exige PS5/PlayStation 5 em copy, hero e briefing — mesmo que o usuário peça abstração e proíba fotografia. Não substituir PS5 por 'gaming', 'performance' ou formas sem ligação ao tema. Um banner de campanha precisa de um elemento hero reconhecível, escala dramática, espaço negativo intencional e informação fiel; não usar o mesmo template universal. O campo enhancedPrompt deve conter entre 900 e 3500 caracteres de direção de arte aprofundada em português brasileiro com seções OBJETIVO, PÚBLICO, COPY, FORMATO, GRID, ALINHAMENTO, MARGENS, TIPOGRAFIA, PALETA, CONTRASTE, ELEMENTOS VETORIAIS, ACABAMENTO, RESTRIÇÕES, PRODUÇÃO E CONTROLE DE QUALIDADE. Especifique os elementos e sua distribuição, sem inventar fatos. O headline deve ser curto (ideal 25-55 caracteres), contendo a promessa real mais importante, sem inventar marcas nem dados. O subheadline deve ter no máximo 110 caracteres. A direção visual descreve composição autoral, contraste acessível, ritmo, proporção, elementos gráficos geométricos, área segura, dimensões e tipografia. Nunca invente preços, avaliações, desconto, 'grátis' ou funcionalidade não declarada. Evite UI falsa, microtextos, listas densas, pequenos cartões e áreas vazias excessivas. Use português do Brasil. Forme um único foco visual. Represente apenas texto, formas e geometria porque o renderizador não cria fotografias. Entregue JSON, não código ou Markdown.`;
+ const user=`SOLICITAÇÃO ORIGINAL INALTERÁVEL: ${input.originalPrompt||input.prompt}\nASSUNTO OBRIGATÓRIO: ${intent.subject}\nMARCA: ${intent.brand||'não especificada'}\nINCLUIR: ${intent.mustInclude.join(', ')}\nINTENÇÃO VISUAL: ${intent.renderIntent}\nDESCRIÇÃO DO USUÁRIO: ${input.prompt}\nESTILO: ${input.style}\nFORMATO: ${input.format}\nREVISÃO: ${input.instruction||'primeira criação'}\n${input.enhancedPrompt?`PROMPT EDITADO PELO USUÁRIO: ${input.enhancedPrompt.slice(0,8500)}`:''}\nFaça a direção de arte profissional obedecendo ao conteúdo solicitado.`;
  const preferred=Deno.env.get('NVIDIA_MODEL');
  const candidates=[...(preferred&&preferred!=='auto'?[preferred]:[]),...FREE_TRIAL_MODELS];
  let lastError='Nenhum modelo respondeu';
@@ -138,7 +149,7 @@ async function nvidiaBrief(input:GenerateInput,apiKey:string):Promise<{brief:Pos
     const reply=await response.json() as {choices?:Array<{message?:{content?:string}}>} ;
     const content=reply.choices?.[0]?.message?.content;
     if(!content){lastError=`${model}: resposta sem conteúdo`;continue}
-    const raw=parseJSON(content);const brief=safeBrief(raw,input.prompt);
+    const raw=parseJSON(content);const brief=safeBrief(raw,input.originalPrompt||input.prompt);
     return {brief,enhancedPrompt:detailedPrompt(input,brief,raw),model};
    }catch{lastError=`${model}: resposta não foi um briefing JSON válido`;if(jsonMode)continue}
   }
@@ -167,7 +178,7 @@ Deno.serve(async(req:Request)=>{
  if(!userId)return json({error:'Entre com seu e-mail para gerar designs com a NVIDIA.'},401,origin);
  if(!key)return json({error:'NVIDIA_API_KEY não configurada no Supabase.'},503,origin);
  const body=await req.text();
- if(body.length>13500)return json({error:'Solicitação grande demais.'},413,origin);
+ if(body.length>24000)return json({error:'Solicitação grande demais.'},413,origin);
  let data:unknown;
  try{data=JSON.parse(body)}catch{return json({error:'JSON inválido.'},400,origin)}
  if(!isInput(data))return json({error:'Descrição, estilo ou formato inválido.'},422,origin);
@@ -176,10 +187,13 @@ Deno.serve(async(req:Request)=>{
   if(!quota.allowed)return json({error:quota.reason||'Cota esgotada.'},429,origin);
   const result=await nvidiaBrief(data,key);
   if(action==='enhance')return json({...result,remainingToday:quota.remainingToday},200,origin);
-  const design=composeProfessionalDesign(result.brief,data.prompt,data.style,data.format);
-  const issues=auditProfessionalDesign(design);
+  const source=data.originalPrompt||data.prompt;
+  const intent=extractArtIntent(source,data.prompt);
+  const design=composeProfessionalDesign(result.brief,data.prompt,data.style,data.format,source);
+  const issues=auditProfessionalDesign(design,intent);
   return json({...result,design,modelMode:'automatic',remainingToday:quota.remainingToday,
-   repairs:issues.length?['Composição normalizada para melhor leitura e hierarquia.']:[]},200,origin);
+   qualityReport:{passed:issues.length===0,issues},
+   repairs:issues.length?['Direção de arte revisada: '+issues.slice(0,3).join(' | ')]:[]},200,origin);
  }catch(error){
   const message=error instanceof Error?error.message:'Falha da geração.';
   console.error('FrameCraft:',message);

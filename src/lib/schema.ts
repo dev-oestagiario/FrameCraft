@@ -72,6 +72,11 @@ export const briefSchema = z.object({
   hierarchy: z.string().max(500),
   imagePrompt: z.string().max(900).optional(),
   callToAction: z.string().max(120),
+  brand: z.string().max(140).optional(),
+  subject: z.string().max(170).optional(),
+  mustInclude: z.array(z.string().min(1).max(170)).max(12).optional(),
+  heroElement: z.string().max(400).optional(),
+  renderIntent: z.enum(['professional-ad','editorial','simple-post']).optional(),
 });
 export type CreativeBrief = z.infer<typeof briefSchema>;
 export const generateRequestSchema = z.object({

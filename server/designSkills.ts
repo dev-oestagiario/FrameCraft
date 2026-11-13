@@ -19,6 +19,9 @@ const outputGuides:Record<GenerateRequest['format'],string>={
 
 export function buildDesignGuidance(style:GenerateRequest['style'],format:GenerateRequest['format']):string {
   return [
+    'ASSUNTO ORIGINAL É OBRIGATÓRIO: extraia marcas, produtos e entidades nomeadas; PS5 deve ser identificável como PS5 e não apenas como "gaming". Preserve a copy real e nunca invente funcionalidades.',
+    'ARTE DE CAMPANHA: usar elemento hero reconhecível, perspectiva, camadas de profundidade, silhuetas estilizadas e composição específica por assunto, não template genérico.',
+    'FONTE DE VERDADE: frame.md define tokens, não o desenho. Adapte o fluxo determinístico do Hyperframes para quadros estáticos, não use suas ferramentas de vídeo para PNG.',
     'PLAYBOOK DE DIREÇÃO DE ARTE:',stylePlaybooks[style],
     'PLAYBOOK DE FORMATO:',outputGuides[format],
     'CHECKLIST DE QUALIDADE: preserve exatamente nomes próprios e textos fornecidos; não fabrique dados; use contraste legível; mantenha áreas seguras; nunca posicione duas caixas de texto na mesma área; dimensões exatas; espaçamento consistente; foco claro; não use mais de dois estilos de fonte; prefira precisão a ornamentação; evite identidade genérica de inteligência artificial.',

@@ -1,12 +1,18 @@
-# AI Image Studio — instruções para agentes
+# FrameCraft — instruções para agentes de desenvolvimento
 
-Use as skills locais de `.agents/skills/` durante tarefas de geração, interface e depuração:
-- `nvidia-model-routing` para modelos, quotas, respostas vazias e JSON
-- `visual-design-generation` para layouts e prompts profissionais
-- `react-ui-quality` para React, acessibilidade e edição
-- `responsive-visual-testing` para regressões visuais, responsividade e exportação
+Antes de qualquer edição no motor de imagens, leia `frame.md` e as skills locais:
+- `.agents/skills/framecraft-campaign-director/SKILL.md`: direção de arte, campanhas premium e hero.
+- `.agents/skills/framecraft-visual-qa/SKILL.md`: auditoria de cortes, legibilidade, fidelidade e regressão.
+- `.agents/skills/framecraft-hyperframes-composition/SKILL.md`: padrões inspirados no Hyperframes (identidade separada do layout, frame fixo, determinismo).
+- `.agents/skills/visual-design-generation/SKILL.md`: JSON e regras do motor.
+- `.agents/skills/nvidia-model-routing/SKILL.md`: tentativas de modelos e quota.
+- `.agents/skills/react-ui-quality/SKILL.md`: interface e componentes.
+- `.agents/skills/responsive-visual-testing/SKILL.md`: testes em múltiplos viewports.
 
-Referências externas recomendadas: `vercel-labs/agent-skills` (React Best Practices, Web Design Guidelines). Consulte as skills externas em suas fontes oficiais; não adicione dependências pagas para corrigir problemas básicos.
+Fidelidade: a descrição original é fonte de verdade. PS5 não pode virar "um banner gamer abstrato sem referência ao console". Proibir alegações inventadas e preservação de nomes de marca, produto e informações obrigatórias.
 
-Sempre execute `npm run typecheck`, `npm test`, `npm run build` quando dependências estiverem disponíveis. Se os testes não puderem rodar, reporte a limitação.
-Nunca comite `.env` ou chaves NVIDIA.
+Fonte de verdade: `src/lib/proComposer.ts` e `src/lib/subjectFidelity.ts`. Ao mudar o motor, sincronize `supabase/functions/framecraft-api/` e publique a Edge Function. Não acople o frontend ao secret NVIDIA.
+
+Qualidade: design estruturado deve passar em Zod + auditoria semântica; redesenhar um template não substitui renderizar e revisar. Os paths SVG são dados restritos, nunca HTML executável.
+O Hyperframes é um framework de vídeo: adaptar técnicas de composição e frame.md, NÃO alegar que o app usa seu renderizador de vídeo para criar PNGs.
+Execute `npm run typecheck`, `npm test`, `npm run build`; validar o workflow do Pages. Se não conseguir verificar, informe a limitação. Nunca versionar `.env` ou tokens privados.
