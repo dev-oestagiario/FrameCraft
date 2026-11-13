@@ -63,6 +63,15 @@ jobs:
     steps:
       - name: Obter código para verificação pública
         uses: actions/checkout@v4
+      - name: Configurar a origem correta do GitHub Pages
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh api --method PUT "repos/${GITHUB_REPOSITORY}/pages" -f build_type=workflow >/dev/null 2>&1; then
+            echo "GitHub Pages configurado para publicar pelo GitHub Actions."
+          else
+            echo "::warning::Não foi possível ajustar a origem pelo token do workflow. Configure Settings > Pages > Build and deployment > Source = GitHub Actions."
+          fi
       - name: Publicar
         id: deployment
         uses: actions/deploy-pages@v4
