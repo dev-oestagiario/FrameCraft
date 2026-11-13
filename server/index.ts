@@ -90,7 +90,7 @@ function expandLocalPrompt(input:z.infer<typeof generateRequestSchema>,brief:Cre
   'ELEMENTOS E TÉCNICA: composição vetorial profissional com retângulos, elipses, linhas, polígonos, estrelas e gradientes discretos.',
   'CONTROLE DE QUALIDADE: sem microtextos, cortes, sobreposição, margem irregular, CTAs deslocados, informação inventada ou excesso de espaço vazio.',
   'SAÍDA: JSON estruturado com dimensões exatas, formas editáveis e tipografia hierarquizada.'
- ].join('\\n\\n');
+ ].join('\n\n');
 }
 app.post('/api/enhance',async(req,res)=>{
  try{

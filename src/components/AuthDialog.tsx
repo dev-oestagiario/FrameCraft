@@ -1,4 +1,5 @@
 import {useEffect,useState} from 'react';
+import type {FormEvent} from 'react';
 import {createPortal} from 'react-dom';
 import {ArrowRight,CheckCircle2,LockKeyhole,Mail,ShieldCheck,X} from 'lucide-react';
 import {auth} from '../lib/auth';
@@ -17,7 +18,7 @@ export function AuthDialog({open,onClose,signedEmail}:Props){
   return()=>document.removeEventListener('keydown',key);
  },[open,onClose]);
  if(!open)return null;
- async function sendMagicLink(e:React.FormEvent){
+ async function sendMagicLink(e:FormEvent){
   e.preventDefault();setError('');setSending(true);
   try{await auth.sendLink(email);setSent(true)}
   catch(err){setError(err instanceof Error?err.message:'Não foi possível enviar o link de acesso.')}
