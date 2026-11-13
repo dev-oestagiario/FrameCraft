@@ -54,6 +54,7 @@ export const pathElement = baseShape.extend({
 });
 export const imageElement = baseShape.extend({
   type: z.literal('image'),
+  fit: z.enum(['cover','stretch']).default('stretch'),
   src: z.string().max(4_800_000).refine(v => v.startsWith('data:image/png;base64,') || v.startsWith('data:image/jpeg;base64,') || v.startsWith('data:image/webp;base64,'), 'Imagem precisa ser data URI local'),
 });
 export const designElement = z.discriminatedUnion('type', [textElement, rectElement, ellipseElement, polygonElement, starElement, lineElement, pathElement, imageElement]);
@@ -89,7 +90,7 @@ export const briefSchema = z.object({
 });
 export type CreativeBrief = z.infer<typeof briefSchema>;
 export const generateRequestSchema = z.object({
-  prompt: z.string().trim().min(2).max(3000),
+  prompt: z.string().trim().min(2).max(8500),
   style: z.enum(['studio','bold','editorial','minimal','playful']),
   format: z.enum(['portrait','square','story','landscape','banner']),
   previous: designSchema.optional(),

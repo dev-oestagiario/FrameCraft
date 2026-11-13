@@ -270,3 +270,25 @@ Projeto Supabase de destino: `dtvbphnoqkbxlwdiivvv` (`https://dtvbphnoqkbxlwdiiv
 A função foi publicada no projeto novo e a tabela de cotas foi criada em `private.framecraft_ai_requests`, com acesso somente ao servidor. O antigo projeto não é excluído.
 
 A chave `NVIDIA_API_KEY` é um segredo configurado **por projeto** e deve ser adicionada em https://supabase.com/dashboard/project/dtvbphnoqkbxlwdiivvv/functions/secrets. Configure também a URL de redirecionamento da autenticação em https://supabase.com/dashboard/project/dtvbphnoqkbxlwdiivvv/auth/url-configuration. O GitHub Pages aponta diretamente à nova função HTTPS; a variável legada `FRAMECRAFT_API_URL` não pode mais substituir automaticamente o endereço.
+
+## FrameCraft 2.1 — geração visual real e anúncios híbridos
+
+Anteriormente, a NVIDIA apenas produzia texto/JSON e o sistema improvisava o hero com formas geométricas. Nesta revisão há um endpoint de geração de **pixels reais** usando FLUX.1 Schnell, quando disponível para a chave NVIDIA.
+
+- Na criação, selecione **Imagem profissional (IA)** (padrão), descreva o produto e clique em **Gerar minha imagem**. A Edge Function gera o briefing, chama o modelo visual e retorna imagem JPEG/PNG; o frontend monta a campanha, mantendo headline e CTA editáveis no canvas.
+- Como alternativa, selecione **Usar minha foto** para importar uma imagem PNG/JPEG/WebP até 3 MB. A foto permanece no navegador e não é enviada ao provedor de imagem; apenas o briefing textual é usado na API NVIDIA.
+- O **modo vetorial** continua disponível para layouts inteiramente editáveis.
+- Em modo híbrido, a imagem é posicionada com recorte `cover` sem distorção; os textos ficam em camadas separadas e são exportados junto com a imagem para PNG, WebP ou JSON.
+- Em caso de falta de acesso ou cota, a aplicação mostra erro e oferece importação de foto. Não afirma ter gerado uma foto quando criou apenas polígonos.
+
+### NVIDIA visual: requisitos
+
+No projeto Supabase `dtvbphnoqkbxlwdiivvv`, configure o secret `NVIDIA_API_KEY`.
+A API visual chama `https://ai.api.nvidia.com/v1/genai/black-forest-labs/flux.1-schnell`.
+O acesso de preview não é garantido para todas as contas; respeite os termos de avaliação e uso comercial da NVIDIA/Black Forest Labs. O modelo FLUX.1 Schnell suporta geração de imagens e tem documentação de uso comercial do modelo, mas as condições do serviço de trial NVIDIA continuam aplicáveis.
+A imagem visual gerada é quadrada (1024 px) no endpoint utilizado e recortada para o formato da arte sem distorcer. Não equivale automaticamente à qualidade do GPT Image para todos os estilos.
+
+Rota protegida por e-mail confirmado e controle de quota: `POST /api/generate-visual` com `prompt`, `originalPrompt`, `style`, `format`.
+O segredo NVIDIA fica apenas na Edge Function. Consulte `.agents/skills/framecraft-visual-image-generation/SKILL.md`.
+
+Teste local: `npm run typecheck`, `npm test`, `npm run build`. O CI não testa uma geração real sem credenciais autorizadas; a disponibilidade da geração visual deverá ser verificada em uma conta autenticada.

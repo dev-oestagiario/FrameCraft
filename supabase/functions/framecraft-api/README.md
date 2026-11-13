@@ -51,3 +51,7 @@ A produção visual atual gera **JSON editável e arte vetorial**, não fotos ge
 ## Migração do projeto
 
 O projeto anterior continua separado e não recebe novas solicitações do FrameCraft. Na conta nova, configure `NVIDIA_API_KEY` em Edge Function Secrets para ativar a geração. A integração do GitHub Pages usa a URL deste projeto. A autenticação por e-mail requer Redirect URL `https://dev-oestagiario.github.io/FrameCraft/` em Auth → URL Configuration.
+
+## Hero visual NVIDIA
+
+A rota POST /api/generate-visual usa autenticação por e-mail e quotas por usuário antes de chamar um NIM visual verdadeiro: FLUX.1 Schnell. Resposta: brief + hero.src (data URI) + modelo. Consulte visualImage.ts. Nunca publicar a NVIDIA_API_KEY no frontend. A disponibilidade de trial e condições de uso dependem da conta; falhas retornam erro explícito, sem fallback silencioso para vetores.

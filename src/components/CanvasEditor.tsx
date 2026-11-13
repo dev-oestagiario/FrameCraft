@@ -11,7 +11,16 @@ function useLoaded(src:string){const [image,setImage]=useState<HTMLImageElement|
  return()=>{mounted=false};
 },[src]);return image;}
 function ImageNode({element,common,register}:{element:ImageElement,common:Record<string,unknown>,register:(node:Konva.Node|null)=>void}){
- const img=useLoaded(element.src);return <KImage ref={register} {...common} image={img||undefined} width={element.width} height={element.height}/>;
+ const img=useLoaded(element.src);
+ const crop=img&&element.fit==='cover'?(()=>{
+   const boxRatio=element.width/element.height, imageRatio=img.width/img.height;
+   const cropWidth=boxRatio>imageRatio?img.width:img.height*boxRatio;
+   const cropHeight=boxRatio>imageRatio?img.width/boxRatio:img.height;
+   return {x:(img.width-cropWidth)/2,y:(img.height-cropHeight)/2,
+     width:cropWidth,height:cropHeight};
+ })():undefined;
+ return <KImage ref={register} {...common} image={img||undefined}
+   width={element.width} height={element.height} crop={crop}/>;
 }
 function regularPoints(width:number,height:number,sides:number,innerRatio?:number):number[]{
  const points:number[]=[];const n=innerRatio?sides*2:sides;
