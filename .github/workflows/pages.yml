@@ -1,0 +1,64 @@
+name: Testar e publicar FrameCraft no GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Testes, TypeScript e build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Obter código
+        uses: actions/checkout@v4
+      - name: Configurar Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Instalar dependências
+        run: npm ci
+      - name: Rodar testes
+        run: npm test
+      - name: Compilar frontend
+        env:
+          GITHUB_PAGES: 'true'
+          VITE_API_BASE_URL: ${{ vars.FRAMECRAFT_API_URL }}
+        run: npm run build
+      - name: Desabilitar Jekyll
+        if: github.event_name != 'pull_request'
+        run: touch dist/.nojekyll
+      - name: Preparar GitHub Pages
+        if: github.event_name != 'pull_request'
+        uses: actions/configure-pages@v5
+      - name: Enviar artefato
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: ./dist
+
+  deploy:
+    name: Publicar site
+    if: github.event_name != 'pull_request'
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    steps:
+      - name: Publicar
+        id: deployment
+        uses: actions/deploy-pages@v4

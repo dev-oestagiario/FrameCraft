@@ -1,6 +1,6 @@
 import {useEffect,useRef,useState,useMemo} from 'react';
 import type {ReactNode} from 'react';
-import {ArrowDownToLine,ArrowRight,Check,ChevronDown,ChevronRight,Circle,CircleHelp,Download,FileImage,FileJson,ImagePlus,Layers,LayoutTemplate,Maximize2,Minus,MousePointer2,Plus,Redo2,RotateCcw,Send,Settings2,Shapes,Sparkles,Trash2,Type,Undo2,Upload,WandSparkles,X,Zap} from 'lucide-react';
+import {ArrowDownToLine,ArrowRight,Check,ChevronDown,ChevronRight,Circle,CircleHelp,Download,FileImage,FileJson,ImagePlus,Layers,LayoutTemplate,Maximize2,Minus,MousePointer2,Plus,Redo2,RotateCcw,Send,Settings2,Shapes,Sparkles,Trash2,Type,Undo2,Upload,WandSparkles,X,Zap,PlugZap,Focus} from 'lucide-react';
 import type {DesignElement,CreativeBrief,GenerateRequest,Design} from './lib/schema';
 import {designSchema,formats} from './lib/schema';
 import {saveJSON,readDesign,readImage} from './lib/file';
@@ -8,6 +8,8 @@ import {qaHub,templateOptions} from './data/templates';
 import {useStudio} from './store/useStudio';
 import {CanvasEditor} from './components/CanvasEditor';
 import {analyzeLayout} from './lib/designQuality';
+import {apiUrl,isPagesWithoutApi,API_CHANGED_EVENT} from './lib/apiConnection';
+import {ApiSettingsDialog} from './components/ApiSettingsDialog';
 
 const styles:[GenerateRequest['style'],string][]=[['studio','Studio'],['bold','Impactante'],['editorial','Editorial'],['minimal','Minimalista'],['playful','Criativo']];
 const sizes:[GenerateRequest['format'],string][]=[['portrait','Instagram 4:5'],['square','Quadrado 1:1'],['story','Story 9:16'],['landscape','Paisagem 16:9'],['banner','Banner / OG']];
@@ -79,7 +81,7 @@ function Inspector(){
  </aside>;
 }
 function BriefBox({brief}:{brief:CreativeBrief}){const [open,setOpen]=useState(false);return <div className="brief-box"><button className="brief-title" onClick={()=>setOpen(v=>!v)}><span><Check size={14}/> Briefing da IA</span><ChevronDown size={14} className={open?'rotate':''}/></button>{open&&<div className="brief-body"><p><strong>Conceito:</strong> {brief.concept}</p><p><strong>Direção visual:</strong> {brief.visualDirection}</p><p><strong>Hierarquia:</strong> {brief.hierarchy}</p><p><strong>Tipografia:</strong> {brief.typography}</p><div className="swatches">{brief.palette.map(x=><span key={x} style={{background:x}} title={x}/>)}</div></div>}</div>}
-function GeneratePanel(){
+function GeneratePanel({onConfigureApi}:{onConfigureApi:()=>void}){
  const {setBrief,brief,setDesign,loading,setLoading,error,setError,design}=useStudio();
  const [prompt,setPrompt]=useState(defaultPrompt);
  const [style,setStyle]=useState<GenerateRequest['style']>('studio');
@@ -90,24 +92,29 @@ function GeneratePanel(){
  const [selectedModel,setSelectedModel]=useState<string|null>(null);
  const [checkingModels,setCheckingModels]=useState(false);
  const [catalogAccessible,setCatalogAccessible]=useState<boolean|null>(null);
+ const [apiUnconfigured,setApiUnconfigured]=useState(isPagesWithoutApi);
+ const [apiOffline,setApiOffline]=useState(false);
  const [repairMessages,setRepairMessages]=useState<string[]>([]);
  async function checkModels(){
    setCheckingModels(true);
+   if(isPagesWithoutApi()){setApiUnconfigured(true);setApiOffline(false);setConnected(false);setSelectedModel(null);setCheckingModels(false);return}
+   setApiUnconfigured(false);
    try{
-     const r=await fetch('/api/models');
+     const r=await fetch(apiUrl('models'));
      if(!r.ok)throw new Error('API indisponível');
      const status=await r.json() as {configured:boolean;selected:string|null;catalogAccessible:boolean};
-     setConnected(status.configured);setSelectedModel(status.selected);setCatalogAccessible(status.catalogAccessible);
-   }catch{setConnected(false)}
+     setConnected(status.configured);setSelectedModel(status.selected);setCatalogAccessible(status.catalogAccessible);setApiOffline(false);
+   }catch{setConnected(false);setApiOffline(true)}
    finally{setCheckingModels(false)}
  }
- useEffect(()=>{void checkModels()},[]);
+ useEffect(()=>{void checkModels();const listener=()=>{void checkModels()};window.addEventListener(API_CHANGED_EVENT,listener);return()=>window.removeEventListener(API_CHANGED_EVENT,listener)},[]);
  async function generate(useRevision=false){
+   if(apiUnconfigured){setError('Conecte um backend HTTPS para usar a geração NVIDIA no GitHub Pages.');return}
    if(prompt.trim().length<8){setError('Descreva a imagem com pelo menos 8 caracteres.');return}
    setLoading(true);setError(null);setRepairMessages([]);
    try{
      const request:GenerateRequest={prompt,style,format,...(useRevision?{previous:{...design,elements:design.elements.filter(e=>e.type!=='image')},instruction:revision}:{} )};
-     const r=await fetch('/api/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(request)});
+     const r=await fetch(apiUrl('generate'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(request)});
      const response=await r.json() as {brief?:CreativeBrief,design?:Design,error?:string,model?:string,repairs?:string[]};
      if(!r.ok||!response.brief||!response.design)throw new Error(response.error||`HTTP ${r.status}: erro na geração`);
      const validated=designSchema.parse(response.design);setBrief(response.brief);setDesign(validated);
@@ -121,15 +128,17 @@ function GeneratePanel(){
    <div className="side-heading"><div><div className="micro-label">CRIAR COM IA</div><h3>Da ideia à imagem.</h3></div><div className="side-heading-icon"><Sparkles size={18}/></div></div>
    <div className="prompt-content"><label className="input-label" htmlFor="prompt">O que vamos criar?</label>
     <div className="prompt-box"><textarea id="prompt" value={prompt} onChange={e=>setPrompt(e.target.value)} placeholder="Ex.: Crie um post de divulgação para minha marca..." rows={8} maxLength={3000}/><div className="prompt-foot"><span><WandSparkles size={14}/> Linguagem natural</span><span>{prompt.length}/3000</span></div></div>
+    <div className="fc-idea-heading">Experimente um ponto de partida</div><div className="fc-prompt-ideas"><button type="button" onClick={()=>setPrompt('Crie um post profissional para Instagram divulgando o QA Hub. Destaque geração de casos de teste com IA, produtividade e um fluxo organizado. Layout editorial com tipografia forte, cores verde-petróleo e detalhes menta.')}>Post de produto</button><button type="button" onClick={()=>setPrompt('Crie um banner de lançamento para uma plataforma tecnológica chamada QA Hub. Direção visual minimalista, hierarquia clara, mensagem curta e chamada para conhecer a ferramenta.')}>Banner de lançamento</button><button type="button" onClick={()=>setPrompt('Crie uma capa para apresentação de software QA. Visual contemporâneo, título grande, composição geométrica precisa e contraste profissional.')}>Capa de apresentação</button></div>
     <div className="side-subheading">Estilo visual</div><div className="style-chips">{styles.map(([v,label])=><button key={v} onClick={()=>setStyle(v)} className={'style-chip '+(style===v?'selected':'')}>{style===v&&<Check size={12}/>} {label}</button>)}</div>
     <div className="side-subheading">Dimensão da arte</div><div className="select-wrap"><Maximize2 size={17}/><select value={format} onChange={e=>setFormat(e.target.value as GenerateRequest['format'])}>{sizes.map(([value,label])=><option value={value} key={value}>{label}  ·  {formats[value].width}×{formats[value].height}</option>)}</select><ChevronDown size={16}/></div>
     <button className="generate-btn" disabled={loading} onClick={()=>void generate()}>{loading?<><span className="spinner"/> Criando design...</>:<><Sparkles size={18}/> Gerar minha imagem <ArrowRight size={17}/></>}</button>
     {loading&&<p className="busy-caption">A NVIDIA está elaborando o briefing e a composição JSON. Isso pode levar algum tempo.</p>}
     {error&&<div className="error-box" role="alert"><CircleHelp size={17}/><span>{error}</span><button type="button" aria-label="Fechar erro" onClick={()=>setError(null)}><X size={16}/></button></div>}
     {repairMessages.length>0&&<details className="repair-notice"><summary><Check size={15}/> Design gerado com {repairMessages.length} ajuste(s) automático(s)</summary><ul>{repairMessages.slice(0,12).map((item,i)=><li key={i}>{item}</li>)}</ul></details>}
-    <div className="connected-info">
-      <div className="connection-title"><span className={'status-dot '+(connected?'on':'')}/><strong>{connected?(selectedModel?'Modelo NVIDIA validado':'Chave NVIDIA configurada'):'Modo demonstração'}</strong><button type="button" disabled={checkingModels} title="Verificar modelos da NVIDIA" aria-label="Verificar modelos da NVIDIA" onClick={()=>void checkModels()}><RotateCcw size={14} className={checkingModels?'spin-icon':''}/></button></div>
-      <span className="subtle-micro" title={selectedModel??'Seleção automática'}>{connected?(selectedModel?`Modelo ativo: ${selectedModel.split('/').at(-1)}`:catalogAccessible?'Seleção automática de modelo gratuito':'Catálogo indisponível: fallback automático na geração'):'Configure NVIDIA_API_KEY no .env'}</span>
+    <div className={'connected-info fc-connection '+(connected?'fc-online':'fc-offline')}>
+      <div className="connection-title"><span className={'status-dot '+(connected?'on':'')}/><strong>{connected?(selectedModel?'NVIDIA conectada':'API configurada'):apiUnconfigured?'Conecte sua API NVIDIA':apiOffline?'Servidor indisponível':'Modo demonstração'}</strong><button type="button" disabled={checkingModels} title="Verificar conexão NVIDIA" aria-label="Verificar conexão NVIDIA" onClick={()=>void checkModels()}><RotateCcw size={14} className={checkingModels?'spin-icon':''}/></button></div>
+      <span className="subtle-micro" title={selectedModel??'Seleção automática'}>{connected?(selectedModel?`Modelo: ${selectedModel.split('/').at(-1)}`:catalogAccessible?'Modelo automático':'Modelo em avaliação'):apiUnconfigured?'No Pages, configure uma API HTTPS externa.':apiOffline?'Confira o endereço da API ou inicie o backend.':'Configure NVIDIA_API_KEY no backend local.'}</span>
+      <button type="button" className="fc-connect-btn" onClick={onConfigureApi}><PlugZap size={14}/> {connected?'Alterar conexão':'Configurar conexão'}</button>
     </div>
     {brief&&<BriefBox brief={brief}/>}
     <button className="revision-toggle" onClick={()=>setShowRevision(v=>!v)}><RotateCcw size={16}/> Refinar por comando <ChevronRight size={15} className={showRevision?'rotate90':''}/></button>
@@ -142,27 +151,28 @@ function HelpDialog({close}:{close:()=>void}){return <div className="modal-backd
 function App(){
  const {design,setDesign,undo,redo,undoStack,redoStack,loading,reset}=useStudio();
  const layoutIssues=useMemo(()=>analyzeLayout(design),[design]);
- const [zoom,setZoom]=useState(100);const [exportOpen,setExportOpen]=useState(false);const [help,setHelp]=useState(false);const [mobilePanel,setMobilePanel]=useState<'prompt'|'layers'>('prompt');
+ const [zoom,setZoom]=useState(100);const [exportOpen,setExportOpen]=useState(false);const [help,setHelp]=useState(false);const [apiSettingsOpen,setApiSettingsOpen]=useState(false);const [focusMode,setFocusMode]=useState(false);const [templatesExpanded,setTemplatesExpanded]=useState(false);const [mobilePanel,setMobilePanel]=useState<'prompt'|'layers'>('prompt');
  const exportRef=useRef<((mime?:'image/png'|'image/webp')=>void)|null>(null);
  const fileRef=useRef<HTMLInputElement>(null);
  const exportMenu=useRef<HTMLDivElement>(null);
  useEffect(()=>{const fn=(e:KeyboardEvent)=>{if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'&&!e.shiftKey){if(!(e.target instanceof HTMLInputElement)&&!(e.target instanceof HTMLTextAreaElement)){e.preventDefault();undo()}}if((e.ctrlKey||e.metaKey)&&e.shiftKey&&e.key.toLowerCase()==='z'){e.preventDefault();redo()}};window.addEventListener('keydown',fn);return()=>window.removeEventListener('keydown',fn)},[undo,redo]);
  async function openFile(f:File|undefined){if(!f)return;try{setDesign(await readDesign(f))}catch(e){alert(e instanceof Error?e.message:'Arquivo inválido')}}
- return <div className="app-shell">
-  <header className="topbar"><div className="brand"><div className="brand-icon"><Shapes size={22} strokeWidth={2.4}/></div><div className="brand-title">frame<span>craft</span><small>AI IMAGE STUDIO</small></div></div><span className="bar-divider"/><div className="header-subnav"><button className="nav-active"><MousePointer2 size={15}/> Estúdio</button><button onClick={()=>setHelp(true)}><CircleHelp size={15}/> Como usar</button></div><div className="header-actions"><div className="header-pill"><span className="status-dot on"/> Editor JSON</div><button className="ghost-btn import-btn" onClick={()=>fileRef.current?.click()}><Upload size={16}/> Importar</button><input ref={fileRef} className="hidden" type="file" accept="application/json,.json" onChange={e=>{void openFile(e.target.files?.[0]);e.target.value=''}}/><div className="export-wrapper" ref={exportMenu}><button className="top-export-btn" aria-expanded={exportOpen} aria-haspopup="menu" onClick={()=>setExportOpen(x=>!x)}><Download size={16}/> Exportar <ChevronDown size={15}/></button>{exportOpen&&<div className="export-menu" role="menu"><button onClick={()=>{exportRef.current?.('image/png');setExportOpen(false)}}><FileImage size={16}/> PNG <span>Alta resolução</span></button><button onClick={()=>{exportRef.current?.('image/webp');setExportOpen(false)}}><FileImage size={16}/> WebP <span>Compacto</span></button><button onClick={()=>{saveJSON(design);setExportOpen(false)}}><FileJson size={16}/> JSON <span>Editável</span></button></div>}</div></div></header>
+ return <div className={'app-shell '+(focusMode?'focus-mode':'')}>
+  <header className="topbar"><div className="brand"><div className="brand-icon"><Shapes size={22} strokeWidth={2.4}/></div><div className="brand-title">frame<span>craft</span><small>AI IMAGE STUDIO</small></div></div><span className="bar-divider"/><div className="header-subnav"><button className="nav-active"><MousePointer2 size={15}/> Estúdio</button><button onClick={()=>setHelp(true)}><CircleHelp size={15}/> Como usar</button></div><div className="header-actions"><button className="ghost-btn fc-focus-action" title={focusMode?'Exibir painéis':'Ampliar área de criação'} aria-label={focusMode?'Exibir painéis':'Ampliar área de criação'} onClick={()=>setFocusMode(v=>!v)}><Focus size={16}/><span>{focusMode?'Mostrar painéis':'Foco'}</span></button><button className="ghost-btn fc-connection-action" title="Configurar conexão NVIDIA" onClick={()=>setApiSettingsOpen(true)}><PlugZap size={16}/><span>Conexão</span></button><div className="header-pill"><span className="status-dot on"/> Editor JSON</div><button className="ghost-btn import-btn" onClick={()=>fileRef.current?.click()}><Upload size={16}/> Importar</button><input ref={fileRef} className="hidden" type="file" accept="application/json,.json" onChange={e=>{void openFile(e.target.files?.[0]);e.target.value=''}}/><div className="export-wrapper" ref={exportMenu}><button className="top-export-btn" aria-expanded={exportOpen} aria-haspopup="menu" onClick={()=>setExportOpen(x=>!x)}><Download size={16}/> Exportar <ChevronDown size={15}/></button>{exportOpen&&<div className="export-menu" role="menu"><button onClick={()=>{exportRef.current?.('image/png');setExportOpen(false)}}><FileImage size={16}/> PNG <span>Alta resolução</span></button><button onClick={()=>{exportRef.current?.('image/webp');setExportOpen(false)}}><FileImage size={16}/> WebP <span>Compacto</span></button><button onClick={()=>{saveJSON(design);setExportOpen(false)}}><FileJson size={16}/> JSON <span>Editável</span></button></div>}</div></div></header>
   <div className="mobile-tabs"><button className={mobilePanel==='prompt'?'active':''} onClick={()=>setMobilePanel('prompt')}><Sparkles size={16}/> Criar com IA</button><button className={mobilePanel==='layers'?'active':''} onClick={()=>setMobilePanel('layers')}><Layers size={16}/> Propriedades</button></div>
   <div className={'workspace mobile-'+mobilePanel}>
-   <GeneratePanel/>
+   <GeneratePanel onConfigureApi={()=>setApiSettingsOpen(true)}/>
    <main className="main-panel"><div className="main-header"><div><div className="breadcrumb">WORKSPACE <ChevronRight size={13}/> <span>COMPOSIÇÃO ATUAL</span></div><div className="main-heading"><h1>{design.title}</h1><span className="saved-chip"><Check size={12}/> Edição local</span></div></div><button className="square-btn" title="Restaurar o template inicial" onClick={()=>{if(confirm('Restaurar o exemplo do QA Hub? Suas alterações atuais serão substituídas.'))reset()}}><RotateCcw size={18}/></button></div>
     <div className="canvas-toolbar"><div className="toolbar-left"><span className="toolbar-label"><MousePointer2 size={15}/> Seleção</span><span className="toolbar-split"/><button title="Desfazer" disabled={!undoStack.length} onClick={undo}><Undo2 size={17}/></button><button title="Refazer" disabled={!redoStack.length} onClick={redo}><Redo2 size={17}/></button><span className="toolbar-split"/><span className="toolbar-state"><span className="little-green"/> Canvas editável</span></div><div className="toolbar-right"><button title="Reduzir zoom" onClick={()=>setZoom(z=>Math.max(60,z-10))}><Minus size={17}/></button><span className="zoom-value">{zoom}%</span><button title="Ampliar zoom" onClick={()=>setZoom(z=>Math.min(160,z+10))}><Plus size={17}/></button><button title="Ajustar ao painel" onClick={()=>setZoom(100)}><Maximize2 size={17}/></button><span className="toolbar-split"/><button title="Exportar PNG" onClick={()=>exportRef.current?.('image/png')}><ArrowDownToLine size={17}/></button></div></div>
     <CanvasEditor exportRef={exportRef} zoom={zoom}/>
     <div className="layout-quality" role="status"><span className={layoutIssues.length?'quality-attention':'quality-ok'}>{layoutIssues.length?`${layoutIssues.length} ponto(s) para revisar`:'Composição dentro dos limites'}</span>{layoutIssues.length>0&&<details><summary>Verificar layout</summary><ul>{layoutIssues.slice(0,5).map((issue,i)=><li key={i}>{issue}</li>)}</ul></details>}</div>
-    <div className="templates-strip"><div className="templates-intro"><LayoutTemplate size={18}/><div><strong>Pontos de partida</strong><span>Troque de composição rapidamente</span></div></div><div className="template-cards">{templateOptions.map(opt=><button key={opt.id} className="template-card" onClick={()=>{if(confirm('Substituir a composição atual por este template?'))setDesign(structuredClone(opt.doc))}}><span className={'template-swatch '+(opt.id==='qa'?'qa-swatch':'editorial-swatch')}>{opt.id==='qa'?'QA':'Aa'}</span><span>{opt.label}</span><ArrowRight size={14}/></button>)}<button className="template-card blank" onClick={()=>setDesign({...structuredClone(qaHub),title:'Nova composição',elements:[],canvas:{...qaHub.canvas,background:'#ffffff',backgroundEnd:undefined}})}><span className="template-add"><Plus size={18}/></span><span>Em branco</span></button></div></div>
+    <div className={'templates-strip '+(!templatesExpanded?'fc-templates-compact':'')}><div className="templates-intro"><LayoutTemplate size={18}/><div><strong>Modelos de composição</strong><span>Comece com um layout pronto</span></div><button type="button" className="fc-templates-toggle" aria-expanded={templatesExpanded} onClick={()=>setTemplatesExpanded(v=>!v)}>{templatesExpanded?'Recolher':'Explorar modelos'} <ChevronDown size={15} className={templatesExpanded?'rotate':''}/></button></div>{templatesExpanded&&<div className="template-cards">{templateOptions.map(opt=><button key={opt.id} className="template-card" onClick={()=>{if(confirm('Substituir a composição atual por este template?'))setDesign(structuredClone(opt.doc))}}><span className={'template-swatch '+(opt.id==='qa'?'qa-swatch':'editorial-swatch')}>{opt.id==='qa'?'QA':'Aa'}</span><span>{opt.label}</span><ArrowRight size={14}/></button>)}<button className="template-card blank" onClick={()=>setDesign({...structuredClone(qaHub),title:'Nova composição',elements:[],canvas:{...qaHub.canvas,background:'#ffffff',backgroundEnd:undefined}})}><span className="template-add"><Plus size={18}/></span><span>Em branco</span></button></div>}</div>
    </main>
    <Inspector/>
   </div>
-  <footer className="footer-status"><span><span className="status-dot on"/> Framecraft Studio <span className="muted">· React + NVIDIA + JSON</span></span><span>Composição estrutural · A geração de imagens fotorrealistas exige motor adicional</span></footer>
-  {help&&<HelpDialog close={()=>setHelp(false)}/>}
+  <footer className="footer-status"><span><span className="status-dot on"/> FrameCraft <span className="muted">· Composições em JSON</span></span><span>Edição e exportação locais · Geração com IA requer backend conectado</span></footer>
+  {help&&<HelpDialog close={()=>setHelp(false)}/>} 
+  {apiSettingsOpen&&<ApiSettingsDialog onClose={()=>setApiSettingsOpen(false)}/>}
   {loading&&<div className="generation-toast"><span className="spinner"/> A NVIDIA está compondo sua imagem... <span className="muted">Não feche a página.</span></div>}
  </div>;
 }

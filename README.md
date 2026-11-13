@@ -154,3 +154,37 @@ Os testes lógicos do roteador foram executados com respostas simuladas (respost
 A NVIDIA pode produzir cores CSS (`rgba()`, `rgb()`, `hsl()`, `#RGB`, `#RGBA`, `#RRGGBBAA`, nomes de cores, `linear-gradient()`) e famílias de fontes diferentes de `Inter`, `Arial`, `Georgia` e `Verdana`. A versão 1.2 introduz `server/aiRepair.ts`: converte os valores gerados para o contrato `#RRGGBB`, converte fontes incompatíveis para uma alternativa suportada, preserva opacidade de cores transparentes, normaliza propriedades numéricas, IDs duplicados e tipos comuns de formas, e **só então** executa a validação Zod estrita. O frontend apresenta ajustes automáticos em um painel discreto. Não é preciso alterar a chave NVIDIA nem o `.env`. A importação de documentos JSON continua estrita para evitar arquivos malformados. Gradientes em elementos ainda são aproximados pela primeira cor; gradiente de fundo do canvas permanece disponível como duas cores.
 
 Para testar a correção: `npm.cmd test`, `npm.cmd run typecheck`, `npm.cmd run build`. Esses comandos são para execução local caso o ambiente de geração não disponibilize as dependências.
+
+
+## Publicar no GitHub Pages
+
+O deploy do **frontend React** é automático pelo GitHub Actions em cada push na `main`. Pull requests executam os mesmos testes e build, mas não publicam.
+
+1. Abra **Settings → Pages → Build and deployment → Source** e selecione **GitHub Actions**. Essa ativação é feita uma única vez pelo administrador do repositório.
+2. O workflow [`.github/workflows/pages.yml`](.github/workflows/pages.yml) instala as dependências, executa os testes e publica `dist/`.
+3. Depois de uma execução bem-sucedida, abra **https://dev-oestagiario.github.io/FrameCraft/**.
+
+O Vite usa automaticamente o caminho base `/FrameCraft/` apenas na compilação de Pages. O desenvolvimento local continua em `http://localhost:5173/`.
+
+### Gerar layouts com NVIDIA no Pages
+
+**GitHub Pages hospeda somente arquivos estáticos.** Não é possível executar `server/index.ts` nele ou colocar `NVIDIA_API_KEY` no frontend ou nas variáveis `VITE_*`.
+
+Para gerar designs com IA na versão publicada, hospede o backend Express separadamente em um serviço HTTPS confiável:
+
+- Configure `NVIDIA_API_KEY` e `NVIDIA_MODEL=auto` **somente no serviço backend**.
+- Configure `ALLOWED_ORIGIN=https://dev-oestagiario.github.io` no backend, para permitir requisições CORS do site.
+- No site, clique **Conexão → URL pública da API**, informe apenas a origem HTTPS (por exemplo, `https://api.meudominio.com`), clique **Testar conexão** e depois **Salvar conexão**.
+- Opcionalmente, crie a variável pública de repositório `FRAMECRAFT_API_URL` em **Settings → Secrets and variables → Actions → Variables** para definir a URL automaticamente no build. Ela deve conter **somente a URL pública**, nunca a chave NVIDIA.
+
+A conexão pode ser alterada pelo usuário; a URL é armazenada no navegador. Sem backend configurado, o editor continua funcionando para criar, editar, importar e exportar composições locais, mas o botão de gerar com IA informa que a API precisa ser conectada.
+
+### Novidades de interface
+
+- Modo **Foco** na barra superior amplia a área de desenho e esconde os dois painéis laterais.
+- Atalhos de prompts para posts, banners e capas.
+- Lista de modelos recolhível para priorizar a arte.
+- Indicadores de conexão mais claros, estados offline e um painel de configuração HTTPS.
+- Ajustes responsivos de espaçamento, controles, painel lateral, canvas e foco por teclado.
+
+Foram consultadas e aplicadas as skills de `find-skills`: [Anthropic Frontend Design](https://skills.sh/anthropics/skills/frontend-design), [Vercel React Best Practices](https://skills.sh/vercel-labs/agent-skills/vercel-react-best-practices) e [Impeccable](https://skills.sh/pbakaus/impeccable/impeccable).
