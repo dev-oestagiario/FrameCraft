@@ -238,3 +238,27 @@ npm run build
 ```
 
 Os testes reproduzem o caso reportado de um banner PS5 cuja direção de arte retém preto/ciano, mas perde a marca. A composição deve sempre identificar o PS5 e ser diferente da gerada para QA Hub.
+
+## GitHub Pages — erro 404 em main.tsx / favicon.ico
+
+O site é React/Vite e deve servir os arquivos de `dist/`, nunca a entrada de desenvolvimento `/src/main.tsx`.
+
+### Configuração obrigatória do Pages
+
+Em **Settings → Pages → Build and deployment → Source**, escolha **GitHub Actions**, em vez de `Deploy from a branch / main / (root)`. Vite requer build antes de publicar; o workflow `.github/workflows/pages.yml` envia `dist/`.
+
+Endereço publicado: https://dev-oestagiario.github.io/FrameCraft/
+
+### Diagnóstico automático
+
+- O build executa `node scripts/verify-pages-build.mjs` e rejeita `dist/index.html` se ainda contiver `/src/main.tsx`, paths absolutos incorretos, JS inexistente ou ícones ausentes.
+- Depois do deploy, `scripts/verify-pages-live.mjs` consulta o site público e confere `/FrameCraft/assets/*.js` e `/FrameCraft/favicon.svg`, repetindo algumas vezes para tolerar propagação da CDN. Se o Pages ainda servir o código-fonte, exibe a instrução para trocar a origem.
+- Ícones SVG e ICO estão em `public/` e são copiados automaticamente pelo Vite para `dist/`, com URLs relativas ao subdiretório do projeto.
+
+### Testes locais
+
+```bash
+npm ci
+GITHUB_PAGES=true npm run build
+node scripts/verify-pages-build.mjs
+```

@@ -34,6 +34,8 @@ jobs:
           GITHUB_PAGES: 'true'
           VITE_API_BASE_URL: ${{ vars.FRAMECRAFT_API_URL || 'https://kbezscxuhqculdvraqun.supabase.co/functions/v1/framecraft-api' }}
         run: npm run build
+      - name: Validar arquivos do Vite para GitHub Pages
+        run: node scripts/verify-pages-build.mjs
       - name: Desabilitar Jekyll
         if: github.event_name != 'pull_request'
         run: touch dist/.nojekyll
@@ -62,3 +64,5 @@ jobs:
       - name: Publicar
         id: deployment
         uses: actions/deploy-pages@v4
+      - name: Verificar página, JavaScript e favicon publicados
+        run: node scripts/verify-pages-live.mjs
