@@ -3,7 +3,7 @@
  * HyperFrames-inspired: brand tokens remain stable, composition varies by intent.
  * Deterministic JSON: no random coordinates, remote assets, arbitrary HTML or JS.
  */
-import {extractArtIntent,subjectPresent,type ArtIntent} from './subjectFidelity';
+import {extractArtIntent,subjectPresent,type ArtIntent} from './subjectFidelity.ts';
 
 export type PosterStyle='studio'|'bold'|'editorial'|'minimal'|'playful';
 export type PosterFormat='portrait'|'square'|'story'|'landscape'|'banner';
