@@ -33,7 +33,8 @@ describe('FrameCraft minimal studio',()=>{
  });
  it('keeps the ability to generate and refine via NVIDIA',()=>{
   expect(app).toContain("apiUrl('enhance')");
-  expect(app).toContain("apiUrl('generate')");
+  expect(app).toContain('apiUrl(endpoint)');
+  expect(app).toContain("'generate-visual':'generate'");
   expect(app).toContain('Ajustar com IA');
  });
 });
