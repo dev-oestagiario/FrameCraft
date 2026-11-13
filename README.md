@@ -187,3 +187,24 @@ Os endpoints de escrita exigem acesso autenticado e e-mail confirmado. O backend
 A geração produz **composições vetoriais editáveis**, não fotografias geradas por difusão. Imagens fotográficas podem ser importadas como camadas; motor de geração fotográfica ainda não integrado.
 
 O frontend é publicado automaticamente no GitHub Pages em cada commit na `main`. As Edge Functions são implantadas separadamente pelo conector do Supabase.
+
+## Interface minimalista — FrameCraft 1.5
+
+O estúdio agora utiliza uma interface em dois temas neutros (claro e escuro), com alternância na barra superior. A escolha é guardada somente no navegador (`framecraft:theme`) e não modifica as cores do design que você está editando.
+
+A tela inicial prioriza apenas **descrição, estilo, formato e geração**, deixando o canvas ocupar o restante do espaço. O prompt começa vazio, pronto para receber sua ideia.
+
+- Clique em **Editar** para abrir ou fechar o painel de ferramentas/propriedades. Ao selecionar um elemento, o editor de propriedades abre automaticamente.
+- **Adicionar elemento** e **Camadas** são seções recolhíveis dentro do painel de edição.
+- **Modelos** abre uma lista de templates somente quando solicitado; **Nova** abre um canvas em branco mediante confirmação.
+- O botão **⋯** reúne Importar JSON, Modo foco, Conexão da IA e Ajuda.
+- A barra de ferramentas do canvas mantém somente desfazer/refazer e controles de zoom.
+- A janela de login por e-mail respeita os temas, mesmo sendo montada como portal.
+- Em telas pequenas, **Criar** e **Editar** alternam entre os painéis sem cortar o canvas.
+
+O arquivo `src/neutral.css` concentra os tokens de tema e os ajustes de layout, carregado por último em `src/main.tsx` para não interferir no motor gráfico Konva. O contrato de geração da NVIDIA e o backend Supabase continuam inalterados nesta revisão.
+
+### Checklist de validação visual
+
+Testar preferencialmente em 1440, 1024, 768, 390 e 320 px:
+navegação por teclado, foco dos campos, dropdown de exportação, alternância de temas, telas de login e configuração, canvas, zoom e exportação PNG/WebP/JSON. Antes de liberar o deploy, executar `npm run typecheck`, `npm test` e `npm run build`.
