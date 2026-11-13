@@ -4,8 +4,9 @@ import dotenv from 'dotenv';
 import { z } from 'zod';
 import { NvidiaRouter, NvidiaError } from './nvidia';
 import { buildDesignGuidance } from './designSkills';
-import { formats, generateRequestSchema, type CreativeBrief, type Design } from '../src/lib/schema';
+import { designSchema, formats, generateRequestSchema, type CreativeBrief, type Design } from '../src/lib/schema';
 import { repairAiBrief, repairAiDesign } from './aiRepair';
+import { auditProfessionalDesign, composeProfessionalDesign } from '../src/lib/proComposer';
 
 dotenv.config();
 const app = express();
@@ -31,11 +32,11 @@ async function chat(system: string, user: string, maxTokens = 4000): Promise<{co
   return nvidia.chat(system,user,maxTokens);
 }
 
-const directionSystem=`Você é um diretor de arte sênior especializado em publicidade, peças editoriais, capas e infográficos. Transforme qualquer pedido vago numa direção de arte viável e clara. Preserve textos, nomes, marcas, datas e números que o usuário especificar. Não invente métricas, depoimentos ou preços. Escreva em português do Brasil. Responda EXCLUSIVAMENTE com JSON válido, SEM markdown, com estes campos exatos: {"concept":"...","audience":"...","headline":"...","subheadline":"...","visualDirection":"...","typography":"...","palette":["#RRGGBB","#RRGGBB","#RRGGBB"],"hierarchy":"...","imagePrompt":"...","callToAction":"..."}. Use pelo menos dois hexadecimais válidos. O campo imagePrompt descreve um possível asset externo, não prometa que um modelo de imagens será executado. Evite mais que 2 textos grandes por peça. Recomende uma hierarquia com respiro, margens e contraste.`;
+const directionSystem=`Você é um diretor de arte sênior especializado em publicidade, peças editoriais, capas e infográficos. Transforme qualquer pedido vago numa direção de arte viável e clara. Preserve textos, nomes, marcas, datas e números que o usuário especificar. Não invente métricas, depoimentos ou preços. Escreva em português do Brasil. Responda EXCLUSIVAMENTE com JSON válido, SEM markdown, com estes campos exatos: {"concept":"...","audience":"...","headline":"...","subheadline":"...","visualDirection":"...","typography":"...","palette":["#RRGGBB","#RRGGBB","#RRGGBB"],"hierarchy":"...","imagePrompt":"...","callToAction":"..."}. Use pelo menos dois hexadecimais válidos. O campo imagePrompt descreve um possível asset externo, não prometa que um modelo de imagens será executado. O headline deve ter idealmente 28 a 55 caracteres e descrever um benefício real com precisão; o subheadline deve ser curto (até 110 caracteres); um CTA só deve fazer afirmações verificáveis. NUNCA invente 'grátis', descontos, dados ou resultados. Não insira listas longas nem transcreva o pedido inteiro como manchete. Planeje uma peça comercial premium, que funcione como miniatura no Instagram. Recomende hierarquia, contraste >=4.5:1 para texto pequeno, equilíbrio, grandes formas autorais e margens regulares.`;
 
 const designSystem=`Você é um engenheiro de design editorial e especialista em composição tipográfica. Retorne APENAS JSON válido, sem markdown, sem comentários, usando EXATAMENTE o formato:
 {"version":1,"title":"nome","description":"resumo","canvas":{"width":1080,"height":1350,"background":"#0B1621","backgroundEnd":"#123A42"},"elements":[{"id":"unique-id","type":"rect","x":40,"y":40,"width":250,"height":90,"fill":"#234455","radius":16,"rotation":0,"opacity":1,"strokeWidth":0},{"id":"unique-id-2","type":"text","x":60,"y":55,"width":200,"height":65,"content":"Título","fontSize":36,"fontWeight":"bold","color":"#FFFFFF","align":"left","fontFamily":"Inter","rotation":0,"opacity":1}]}.
-Tipos permitidos: text, rect e ellipse. NÃO use tipo image: imagens só podem ser inseridas pelo editor com upload. Use cores #RRGGBB exatas. Para texto, fontWeight normal|bold, fontFamily Inter|Arial|Georgia|Verdana, align left|center|right. Não use Montserrat, Poppins, Roboto, sans-serif, serif ou cores CSS como rgba(), nomes ou #RGB: transforme em #RRGGBB. Para rect inclua fill e radius (0-300), strokeWidth:0. Para ellipse inclua fill. Todos exigem id único, x,y,width,height,opacity:1,rotation:0. O layout deve ser sofisticado, sem cara de template genérico: contraste, hierarquia tipográfica marcante, camadas equilibradas, formas abstratas, cartões e CTAs quando relevantes. Use 7 a 16 elementos bem organizados. O texto deve caber dentro de largura e altura: linhas curtas, títulos legíveis, áreas separadas; não sobreponha elementos de texto. Crie uma arte final de alta qualidade. Sem caracteres emoji obrigatórios. Evite usar uma infinidade de cartões pequenos. O usuário quer um poster bonito, não um mockup de dashboard a menos que solicitado. Não adicione texto comercial falso. Sempre respeite dimensões do canvas e margens de pelo menos 40px. Responda só JSON.`;
+Tipos permitidos: text, rect, ellipse, polygon (sides:3..12), star (points:4..12,innerRatio:0.1..0.85) e line (fill:#RRGGBB,strokeWidth:1..30). Para rect e ellipse use fillEnd opcional para gradiente. Preserve exatamente nomes próprios e mensagens obrigatórias. NÃO use tipo image: imagens só podem ser inseridas pelo editor com upload. Use cores #RRGGBB exatas. Para texto, fontWeight normal|bold, fontFamily Inter|Arial|Georgia|Verdana, align left|center|right. Não use Montserrat, Poppins, Roboto, sans-serif, serif ou cores CSS como rgba(), nomes ou #RGB: transforme em #RRGGBB. Para rect inclua fill e radius (0-300), strokeWidth:0. Para ellipse inclua fill. Todos exigem id único, x,y,width,height,opacity:1,rotation:0. O layout deve ser sofisticado, sem cara de template genérico: contraste, hierarquia tipográfica marcante, camadas equilibradas, formas abstratas, cartões e CTAs quando relevantes. Use 9 a 20 elementos bem organizados. Manchetão de pelo menos 72px em post vertical de 1080px, textos menores a partir de 32px. Proibido inserir cards minúsculos com textos de 12px, áreas vazias maiores que 20% no rodapé, cores de pouco contraste ou cabeçalhos brancos sobre fundos muito claros. O texto deve caber dentro de largura e altura: linhas curtas, títulos legíveis, áreas separadas; não sobreponha elementos de texto. Crie uma arte final de alta qualidade. Sem caracteres emoji obrigatórios. Evite usar uma infinidade de cartões pequenos. O usuário quer um poster bonito, não um mockup de dashboard a menos que solicitado. Não adicione texto comercial falso. Sempre respeite dimensões do canvas e margens de pelo menos 40px. Responda só JSON.`;
 
 async function makeBrief(input:z.infer<typeof generateRequestSchema>):Promise<CreativeBrief>{
   const message=`DESCRIÇÃO ORIGINAL: ${input.prompt}\nESTILO: ${input.style}\nFORMATO: ${formats[input.format].label}\n${input.instruction?`REVISÃO DESEJADA: ${input.instruction}`:''}\nCrie briefing aprofundado, estratégico e visualmente específico. Não introduza alegações inexistentes.\n${buildDesignGuidance(input.style,input.format)}`;
@@ -50,18 +51,29 @@ async function makeBrief(input:z.infer<typeof generateRequestSchema>):Promise<Cr
 async function makeDesign(input:z.infer<typeof generateRequestSchema>, brief:CreativeBrief):Promise<{design:Design;repairs:string[]}>{
   const size=formats[input.format];
   const message=`CANVAS OBRIGATÓRIO: ${size.width}x${size.height} px.\nDIREÇÃO CRIATIVA: ${JSON.stringify(brief)}\nPEDIDO ORIGINAL: ${input.prompt}\nESTILO: ${input.style}\n${input.previous?`DESIGN ANTERIOR, que pode ser modificado: ${JSON.stringify({...input.previous,elements:input.previous.elements.filter(e=>e.type!=='image')})}`:''}\n${input.instruction?`AJUSTE SOLICITADO: ${input.instruction}`:''}\nGere o JSON final de desenho, com aspecto de arte profissional. Inclua todo texto essencial do pedido.\n${buildDesignGuidance(input.style,input.format)}`;
-  let result=await chat(designSystem,message,6500);
-  let raw=result.content;
-  for(let retry=0;retry<2;retry++){
-    try{
-      return repairAiDesign(parseJSON(raw),size,brief.palette);
-    }catch(e){
-      if(retry===1) throw new Error(`Não foi possível validar o layout produzido pela IA: ${e instanceof Error?e.message:'erro desconhecido'}`);
-      result=await chat(designSystem,`${message}\nO JSON anterior foi rejeitado. Corrija estritamente os tipos, medidas e cores, e não adicione campos não suportados. ERRO: ${String(e).slice(0,700)}\nRESPOSTA ANTERIOR: ${raw.slice(0,9000)}`,6500);
-      raw=result.content;
+  let reason='';
+  try{
+    let result=await chat(designSystem,message,6000);
+    for(let retry=0;retry<2;retry++){
+      try{
+        const candidate=repairAiDesign(parseJSON(result.content),size,brief.palette);
+        const issues=auditProfessionalDesign(candidate.design);
+        if(!issues.length)return candidate;
+        reason=issues.slice(0,3).join(' | ');
+        break; // Don't burn more NVIDIA credits on a geometrically poor composition.
+      }catch(e){
+        reason=e instanceof Error?e.message:'JSON inválido';
+        if(retry===0)result=await chat(designSystem,`${message}\nA última versão falhou na validação. Corrija o JSON: ${reason.slice(0,450)}`,6000);
+      }
     }
-  }
-  throw new Error('Falha ao construir o layout');
+  }catch(e){reason=e instanceof Error?e.message:'Falha na etapa de layout';}
+  // Quality gate: do not show illegible amateur layouts. The detailed creative
+  // brief still comes from NVIDIA, but the geometry becomes deterministic.
+  const composed=composeProfessionalDesign(brief,input.prompt,input.style,input.format);
+  const validated=designSchema.parse(composed);
+  const residual=auditProfessionalDesign(validated);
+  if(residual.length)console.warn('[design quality] revisão recomendada:',residual.join(' | '));
+  return {design:validated,repairs:[`Layout reorganizado pela direção de arte profissional: ${reason.slice(0,180)||'melhoria de legibilidade e hierarquia visual'}.`]};
 }
 const requestTracker=new Map<string,number[]>();
 app.post('/api/generate',async(req,res)=>{

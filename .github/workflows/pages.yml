@@ -32,7 +32,7 @@ jobs:
       - name: Compilar frontend
         env:
           GITHUB_PAGES: 'true'
-          VITE_API_BASE_URL: ${{ vars.FRAMECRAFT_API_URL }}
+          VITE_API_BASE_URL: ${{ vars.FRAMECRAFT_API_URL || 'https://kbezscxuhqculdvraqun.supabase.co/functions/v1/framecraft-api' }}
         run: npm run build
       - name: Desabilitar Jekyll
         if: github.event_name != 'pull_request'

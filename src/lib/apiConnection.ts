@@ -1,4 +1,5 @@
 const STORAGE_KEY = 'framecraft.api-origin.v1';
+const ACCESS_KEY = 'framecraft.api-session-token.v1';
 export const API_CHANGED_EVENT = 'framecraft:api-changed';
 
 const buildOrigin = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? '';
@@ -12,17 +13,20 @@ export function normalizeApiOrigin(input: string): string {
   if (url.protocol !== 'https:' && !(url.protocol === 'http:' && isLocal)) {
     throw new Error('Use HTTPS; HTTP é permitido somente para localhost.');
   }
-  if (url.username || url.password || url.search || url.hash || url.pathname !== '/') {
-    throw new Error('Informe apenas a origem da API, sem caminho, credenciais ou parâmetros.');
+  const path=url.pathname.replace(/\/+$/,'');
+  const isSupabase=/^[a-z0-9-]+\.supabase\.co$/i.test(url.hostname);
+  const allowedPath=isSupabase&&path==='/functions/v1/framecraft-api';
+  if (url.username || url.password || url.search || url.hash || (path&&!allowedPath)) {
+    throw new Error('Use apenas a origem da API ou a URL HTTPS da função Supabase FrameCraft.');
   }
-  return url.origin;
+  return url.origin+(allowedPath?path:'');
 }
 
 export function getApiOrigin(): string {
   if (typeof window !== 'undefined') {
     try {
       const stored = window.localStorage.getItem(STORAGE_KEY);
-      if (stored !== null) return stored;
+      if (stored !== null && (stored || !/(^|\.)github\.io$/i.test(window.location.hostname))) return stored;
     } catch { /* Armazenamento indisponível: utilizar configuração de build. */ }
   }
   try { return normalizeApiOrigin(buildOrigin); } catch { return ''; }
@@ -37,6 +41,18 @@ export function saveApiOrigin(value: string): void {
   window.dispatchEvent(new Event(API_CHANGED_EVENT));
 }
 
+export function getAccessToken():string {
+  if(typeof window==='undefined')return '';
+  try{return window.sessionStorage.getItem(ACCESS_KEY)||''}catch{return ''}
+}
+export function saveAccessToken(token:string):void {
+  if(typeof window==='undefined')return;
+  try{
+    if(token.trim())window.sessionStorage.setItem(ACCESS_KEY,token.trim());
+    else window.sessionStorage.removeItem(ACCESS_KEY);
+  }catch{throw new Error('O navegador bloqueou o armazenamento do token nesta sessão.')}
+  window.dispatchEvent(new Event(API_CHANGED_EVENT));
+}
 export function apiUrl(resource: string, origin = getApiOrigin()): string {
   const path = resource.replace(/^\/+/, '');
   return `${origin}/api/${path}`;

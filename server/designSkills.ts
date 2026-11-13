@@ -22,6 +22,8 @@ export function buildDesignGuidance(style:GenerateRequest['style'],format:Genera
     'PLAYBOOK DE DIREÇÃO DE ARTE:',stylePlaybooks[style],
     'PLAYBOOK DE FORMATO:',outputGuides[format],
     'CHECKLIST DE QUALIDADE: preserve exatamente nomes próprios e textos fornecidos; não fabrique dados; use contraste legível; mantenha áreas seguras; nunca posicione duas caixas de texto na mesma área; dimensões exatas; espaçamento consistente; foco claro; não use mais de dois estilos de fonte; prefira precisão a ornamentação; evite identidade genérica de inteligência artificial.',
-    'LIMITE TÉCNICO: o renderizador nativo aceita apenas textos, retângulos e elipses. Não descreva fotografias como se pudessem ser desenhadas em JSON; fotos pertencem ao campo imagePrompt do briefing.',
+    'MOTOR VISUAL: permite textos, retângulos com gradiente, elipses, polígonos regulares (3 a 12 lados), estrelas (4 a 12 pontas) e linhas. Fotos exigem um motor de imagem separado; nunca simule fotos através de caixas.',
+    'REGRAS PROFISSIONAIS OBRIGATÓRIAS: título principal com contraste e escala dominante (ideal 72–120px em posts de 1080px); textos auxiliares >=32px; máximo 3 blocos principais de texto; CTA visível no último terço; não use miniaturas de interface, microtextos, pequenos cartões repetidos ou listas de funcionalidades em fonte reduzida; mantenha equilíbrio visual, ritmo de espaçamento e ao menos um elemento gráfico focal.',
+    'COPYS: preserve as informações solicitadas e nomes próprios, mas resuma sem inventar funcionalidades, preços, gratuidade, métricas ou promessas. Use linguagem editorial concisa. Evite texto genérico e variações vazias. O resultado deve funcionar como peça publicitária profissional quando visto em miniatura.',
   ].join('\n');
 }

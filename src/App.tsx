@@ -8,7 +8,8 @@ import {qaHub,templateOptions} from './data/templates';
 import {useStudio} from './store/useStudio';
 import {CanvasEditor} from './components/CanvasEditor';
 import {analyzeLayout} from './lib/designQuality';
-import {apiUrl,isPagesWithoutApi,API_CHANGED_EVENT} from './lib/apiConnection';
+import {auditProfessionalDesign} from './lib/proComposer';
+import {apiUrl,getAccessToken,isPagesWithoutApi,API_CHANGED_EVENT} from './lib/apiConnection';
 import {ApiSettingsDialog} from './components/ApiSettingsDialog';
 
 const styles:[GenerateRequest['style'],string][]=[['studio','Studio'],['bold','Impactante'],['editorial','Editorial'],['minimal','Minimalista'],['playful','Criativo']];
@@ -35,9 +36,17 @@ function Inspector(){
  const {design,selectedId,select,patchElement,addElement,removeSelected,setDesign}=useStudio();
  const imageInput=useRef<HTMLInputElement>(null);
  const selected=design.elements.find(x=>x.id===selectedId);
- function addShape(type:'text'|'rect'|'ellipse'){
-  const common={id:id(),x:Math.round(design.canvas.width*.2),y:Math.round(design.canvas.height*.2),width:450,height:120,rotation:0,opacity:1};
-  const el:DesignElement=type==='text'?{...common,type,content:'Seu texto aqui',fontSize:60,fontWeight:'bold',color:'#FFFFFF',align:'left',fontFamily:'Inter'}:type==='rect'?{...common,type,fill:'#36D6B0',radius:18,strokeWidth:0}:{...common,type,fill:'#36D6B0'};
+ function addShape(type:'text'|'rect'|'ellipse'|'polygon'|'star'|'line'){
+  const common={id:id(),x:Math.round(design.canvas.width*.2),y:Math.round(design.canvas.height*.2),width:340,height:180,rotation:0,opacity:1};
+  let el:DesignElement;
+  switch(type){
+   case 'text':el={...common,type,content:'Seu texto aqui',fontSize:60,fontWeight:'bold',color:'#FFFFFF',align:'left',fontFamily:'Inter'};break;
+   case 'rect':el={...common,type,fill:'#36D6B0',radius:18,strokeWidth:0};break;
+   case 'ellipse':el={...common,type,fill:'#36D6B0',strokeWidth:0};break;
+   case 'polygon':el={...common,type,fill:'#36D6B0',sides:3,strokeWidth:0};break;
+   case 'star':el={...common,type,fill:'#36D6B0',points:5,innerRatio:0.46,strokeWidth:0};break;
+   case 'line':el={...common,type,fill:'#36D6B0',width:360,height:2,strokeWidth:6};break;
+  }
   addElement(el);
  }
  async function addImage(f:File|undefined){if(!f)return;try{const src=await readImage(f);addElement({type:'image',id:id(),x:140,y:260,width:420,height:360,src,rotation:0,opacity:1})}catch(err){alert(err instanceof Error?err.message:'Imagem inválida')}}
@@ -49,6 +58,9 @@ function Inspector(){
     <button className="tool-btn" onClick={()=>addShape('text')}><Type size={20}/><span>Texto</span></button>
     <button className="tool-btn" onClick={()=>addShape('rect')}><Shapes size={20}/><span>Forma</span></button>
     <button className="tool-btn" onClick={()=>addShape('ellipse')}><Circle size={20}/><span>Círculo</span></button>
+    <button className="tool-btn" onClick={()=>addShape('polygon')}><Shapes size={20}/><span>Polígono</span></button>
+    <button className="tool-btn" onClick={()=>addShape('star')}><Sparkles size={20}/><span>Estrela</span></button>
+    <button className="tool-btn" onClick={()=>addShape('line')}><Minus size={20}/><span>Linha</span></button>
     <button className="tool-btn" onClick={()=>imageInput.current?.click()}><ImagePlus size={20}/><span>Imagem</span></button>
    </div><input ref={imageInput} type="file" className="hidden" accept="image/png,image/jpeg,image/webp" onChange={e=>{void addImage(e.target.files?.[0]);e.target.value=''}}/>
   </div>
@@ -57,7 +69,7 @@ function Inspector(){
    <div className="layers-list">
    {[...design.elements].reverse().map((el)=> <button key={el.id} onClick={()=>select(el.id)} className={'layer-item '+(selectedId===el.id?'active':'')}>
      <span className="layer-icon">{el.type==='text'?<Type size={15}/>:el.type==='image'?<FileImage size={15}/>:<Shapes size={15}/>}</span>
-     <span className="layer-text">{el.type==='text'?el.content.split('\n')[0]:el.type==='rect'?'Retângulo':el.type==='ellipse'?'Elipse':'Imagem'}</span>
+     <span className="layer-text">{el.type==='text'?el.content.split('\n')[0]:el.type==='rect'?'Retângulo':el.type==='ellipse'?'Elipse':el.type==='polygon'?'Polígono':el.type==='star'?'Estrela':el.type==='line'?'Linha':'Imagem'}</span>
      {selectedId===el.id&&<span className="layer-active-dot"/>}
    </button>)}
    </div>
@@ -68,8 +80,11 @@ function Inspector(){
      <div className="field-grid"><Field label="X"><PropertyInput value={selected.x} onChange={v=>update({x:v})}/></Field><Field label="Y"><PropertyInput value={selected.y} onChange={v=>update({y:v})}/></Field><Field label="Largura"><PropertyInput value={selected.width} min={1} onChange={v=>update({width:v})}/></Field><Field label="Altura"><PropertyInput value={selected.height} min={1} onChange={v=>update({height:v})}/></Field></div>
      {selected.type==='text'&& <><Field label="Conteúdo"><textarea className="text-input edit-text" rows={3} value={selected.content} onChange={e=>update({content:e.target.value})}/></Field>
      <div className="field-grid"><Field label="Tamanho da fonte"><PropertyInput value={selected.fontSize} min={10} max={260} onChange={v=>update({fontSize:v})}/></Field><Field label="Peso"><select className="text-input" value={selected.fontWeight} onChange={e=>update({fontWeight:e.target.value as 'bold'|'normal'})}><option value="bold">Negrito</option><option value="normal">Normal</option></select></Field></div></>}
-     {(selected.type==='text'||selected.type==='rect'||selected.type==='ellipse')&&<Field label={selected.type==='text'?'Cor do texto':'Cor do elemento'}><div className="color-field"><input type="color" value={selected.type==='text'?selected.color:selected.fill} onChange={e=>update(selected.type==='text'?{color:e.target.value}:{fill:e.target.value})}/><span>{selected.type==='text'?selected.color:selected.fill}</span></div></Field>}
+     {selected.type!=='image'&&<Field label={selected.type==='text'?'Cor do texto':'Cor do elemento'}><div className="color-field"><input type="color" value={selected.type==='text'?selected.color:selected.fill} onChange={e=>update(selected.type==='text'?{color:e.target.value}:{fill:e.target.value})}/><span>{selected.type==='text'?selected.color:selected.fill}</span></div></Field>}
      {selected.type==='rect'&&<Field label="Arredondamento"><PropertyInput value={selected.radius} min={0} max={300} onChange={v=>update({radius:v})}/></Field>}
+     {selected.type==='polygon'&&<Field label="Número de lados"><PropertyInput value={selected.sides} min={3} max={12} onChange={v=>update({sides:Math.round(v)})}/></Field>}
+     {selected.type==='star'&&<Field label="Número de pontas"><PropertyInput value={selected.points} min={4} max={12} onChange={v=>update({points:Math.round(v)})}/></Field>}
+     {selected.type==='line'&&<Field label="Espessura da linha"><PropertyInput value={selected.strokeWidth} min={1} max={30} onChange={v=>update({strokeWidth:v})}/></Field>}
      <div className="field-grid"><Field label="Rotação"><PropertyInput value={selected.rotation} min={-360} max={360} onChange={v=>update({rotation:v})}/></Field><Field label="Opacidade"><PropertyInput value={selected.opacity} min={0} max={1} step={0.1} onChange={v=>update({opacity:v})}/></Field></div>
    </> : <>
      <div className="field-grid"><Field label="Largura"><span className="static-field">{design.canvas.width}px</span></Field><Field label="Altura"><span className="static-field">{design.canvas.height}px</span></Field></div>
@@ -94,6 +109,7 @@ function GeneratePanel({onConfigureApi}:{onConfigureApi:()=>void}){
  const [catalogAccessible,setCatalogAccessible]=useState<boolean|null>(null);
  const [apiUnconfigured,setApiUnconfigured]=useState(isPagesWithoutApi);
  const [apiOffline,setApiOffline]=useState(false);
+ const [needsToken,setNeedsToken]=useState(false);
  const [repairMessages,setRepairMessages]=useState<string[]>([]);
  async function checkModels(){
    setCheckingModels(true);
@@ -102,19 +118,22 @@ function GeneratePanel({onConfigureApi}:{onConfigureApi:()=>void}){
    try{
      const r=await fetch(apiUrl('models'));
      if(!r.ok)throw new Error('API indisponível');
-     const status=await r.json() as {configured:boolean;selected:string|null;catalogAccessible:boolean};
-     setConnected(status.configured);setSelectedModel(status.selected);setCatalogAccessible(status.catalogAccessible);setApiOffline(false);
+     const status=await r.json() as {configured:boolean;secured?:boolean;selected:string|null;catalogAccessible:boolean};
+     const tokenMissing=Boolean(status.secured&&!getAccessToken());
+     setNeedsToken(tokenMissing);setConnected(status.configured&&!tokenMissing);setSelectedModel(status.selected);setCatalogAccessible(status.catalogAccessible);setApiOffline(false);
    }catch{setConnected(false);setApiOffline(true)}
    finally{setCheckingModels(false)}
  }
  useEffect(()=>{void checkModels();const listener=()=>{void checkModels()};window.addEventListener(API_CHANGED_EVENT,listener);return()=>window.removeEventListener(API_CHANGED_EVENT,listener)},[]);
  async function generate(useRevision=false){
    if(apiUnconfigured){setError('Conecte um backend HTTPS para usar a geração NVIDIA no GitHub Pages.');return}
+   if(needsToken){setError('Informe seu token privado no painel Conexão para autorizar a geração.');return}
    if(prompt.trim().length<8){setError('Descreva a imagem com pelo menos 8 caracteres.');return}
    setLoading(true);setError(null);setRepairMessages([]);
    try{
      const request:GenerateRequest={prompt,style,format,...(useRevision?{previous:{...design,elements:design.elements.filter(e=>e.type!=='image')},instruction:revision}:{} )};
-     const r=await fetch(apiUrl('generate'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(request)});
+     const accessToken=getAccessToken();
+     const r=await fetch(apiUrl('generate'),{method:'POST',headers:{'Content-Type':'application/json',...(accessToken?{Authorization:`Bearer ${accessToken}`}:{})},body:JSON.stringify(request)});
      const response=await r.json() as {brief?:CreativeBrief,design?:Design,error?:string,model?:string,repairs?:string[]};
      if(!r.ok||!response.brief||!response.design)throw new Error(response.error||`HTTP ${r.status}: erro na geração`);
      const validated=designSchema.parse(response.design);setBrief(response.brief);setDesign(validated);
@@ -136,8 +155,8 @@ function GeneratePanel({onConfigureApi}:{onConfigureApi:()=>void}){
     {error&&<div className="error-box" role="alert"><CircleHelp size={17}/><span>{error}</span><button type="button" aria-label="Fechar erro" onClick={()=>setError(null)}><X size={16}/></button></div>}
     {repairMessages.length>0&&<details className="repair-notice"><summary><Check size={15}/> Design gerado com {repairMessages.length} ajuste(s) automático(s)</summary><ul>{repairMessages.slice(0,12).map((item,i)=><li key={i}>{item}</li>)}</ul></details>}
     <div className={'connected-info fc-connection '+(connected?'fc-online':'fc-offline')}>
-      <div className="connection-title"><span className={'status-dot '+(connected?'on':'')}/><strong>{connected?(selectedModel?'NVIDIA conectada':'API configurada'):apiUnconfigured?'Conecte sua API NVIDIA':apiOffline?'Servidor indisponível':'Modo demonstração'}</strong><button type="button" disabled={checkingModels} title="Verificar conexão NVIDIA" aria-label="Verificar conexão NVIDIA" onClick={()=>void checkModels()}><RotateCcw size={14} className={checkingModels?'spin-icon':''}/></button></div>
-      <span className="subtle-micro" title={selectedModel??'Seleção automática'}>{connected?(selectedModel?`Modelo: ${selectedModel.split('/').at(-1)}`:catalogAccessible?'Modelo automático':'Modelo em avaliação'):apiUnconfigured?'No Pages, configure uma API HTTPS externa.':apiOffline?'Confira o endereço da API ou inicie o backend.':'Configure NVIDIA_API_KEY no backend local.'}</span>
+      <div className="connection-title"><span className={'status-dot '+(connected?'on':'')}/><strong>{connected?(selectedModel?'NVIDIA conectada':'API configurada'):apiUnconfigured?'Conecte sua API NVIDIA':apiOffline?'Servidor indisponível':needsToken?'Acesso privado necessário':'Modo demonstração'}</strong><button type="button" disabled={checkingModels} title="Verificar conexão NVIDIA" aria-label="Verificar conexão NVIDIA" onClick={()=>void checkModels()}><RotateCcw size={14} className={checkingModels?'spin-icon':''}/></button></div>
+      <span className="subtle-micro" title={selectedModel??'Seleção automática'}>{connected?(selectedModel?`Modelo: ${selectedModel.split('/').at(-1)}`:catalogAccessible?'Modelo automático':'Backend de IA disponível'):apiUnconfigured?'No Pages, configure uma API HTTPS externa.':apiOffline?'Confira o endereço da API ou inicie o backend.':needsToken?'Informe o token criado nos secrets do Supabase.':'Configure NVIDIA_API_KEY no backend.'}</span>
       <button type="button" className="fc-connect-btn" onClick={onConfigureApi}><PlugZap size={14}/> {connected?'Alterar conexão':'Configurar conexão'}</button>
     </div>
     {brief&&<BriefBox brief={brief}/>}
@@ -150,7 +169,7 @@ function GeneratePanel({onConfigureApi}:{onConfigureApi:()=>void}){
 function HelpDialog({close}:{close:()=>void}){return <div className="modal-backdrop" onMouseDown={close}><div className="modal" onMouseDown={e=>e.stopPropagation()}><div className="modal-top"><h3>Como usar o AI Image Studio</h3><button onClick={close}><X size={20}/></button></div><p>Descreva sua ideia, selecione um formato e clique em <strong>Gerar minha imagem</strong>. Com uma chave NVIDIA configurada, o servidor transforma a descrição em briefing e design JSON; sem chave, você pode editar as artes de exemplo.</p><p>Selecione os elementos para arrastar, redimensionar, girar e alterar as propriedades. Você também pode importar JSON, inserir imagens do computador e exportar PNG, WebP e JSON.</p><p>O editor de composição não produz fotografias por si só. Para gerar imagens fotográficas ou ilustrações, utilize um motor generativo separado (por exemplo, ComfyUI), depois importe o arquivo como camada.</p><div className="modal-links"><a href="https://build.nvidia.com/" target="_blank" rel="noreferrer">Obter chave NVIDIA <ArrowRight size={15}/></a><a href="https://github.com/Comfy-Org/ComfyUI" target="_blank" rel="noreferrer">ComfyUI <ArrowRight size={15}/></a></div><button className="generate-btn" onClick={close}>Entendi</button></div></div>}
 function App(){
  const {design,setDesign,undo,redo,undoStack,redoStack,loading,reset}=useStudio();
- const layoutIssues=useMemo(()=>analyzeLayout(design),[design]);
+ const layoutIssues=useMemo(()=>[...new Set([...analyzeLayout(design),...auditProfessionalDesign(design)])],[design]);
  const [zoom,setZoom]=useState(100);const [exportOpen,setExportOpen]=useState(false);const [help,setHelp]=useState(false);const [apiSettingsOpen,setApiSettingsOpen]=useState(false);const [focusMode,setFocusMode]=useState(false);const [templatesExpanded,setTemplatesExpanded]=useState(false);const [mobilePanel,setMobilePanel]=useState<'prompt'|'layers'>('prompt');
  const exportRef=useRef<((mime?:'image/png'|'image/webp')=>void)|null>(null);
  const fileRef=useRef<HTMLInputElement>(null);

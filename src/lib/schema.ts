@@ -21,17 +21,33 @@ export const textElement = baseShape.extend({
 });
 export const rectElement = baseShape.extend({
   type: z.literal('rect'), fill: hex.default('#2fcaa5'),
-  radius: z.number().min(0).max(300).default(20),
+  radius: z.number().min(0).max(300).default(20), fillEnd: hex.optional(),
   stroke: hex.optional(), strokeWidth: z.number().min(0).max(30).default(0),
 });
 export const ellipseElement = baseShape.extend({
-  type: z.literal('ellipse'), fill: hex.default('#2fcaa5'),
+  type: z.literal('ellipse'), fill: hex.default('#2fcaa5'), fillEnd: hex.optional(),
+  stroke: hex.optional(), strokeWidth: z.number().min(0).max(30).optional(),
+});
+export const polygonElement = baseShape.extend({
+  type: z.literal('polygon'), fill: hex.default('#2fcaa5'),
+  sides: z.number().int().min(3).max(12).default(4),
+  stroke: hex.optional(), strokeWidth: z.number().min(0).max(30).default(0),
+});
+export const starElement = baseShape.extend({
+  type: z.literal('star'), fill: hex.default('#2fcaa5'),
+  points: z.number().int().min(4).max(12).default(5),
+  innerRatio: z.number().min(0.1).max(0.85).default(0.46),
+  stroke: hex.optional(), strokeWidth: z.number().min(0).max(30).default(0),
+});
+export const lineElement = baseShape.extend({
+  type: z.literal('line'), fill: hex.default('#2fcaa5'),
+  strokeWidth: z.number().min(1).max(30).default(5),
 });
 export const imageElement = baseShape.extend({
   type: z.literal('image'),
   src: z.string().max(4_800_000).refine(v => v.startsWith('data:image/png;base64,') || v.startsWith('data:image/jpeg;base64,') || v.startsWith('data:image/webp;base64,'), 'Imagem precisa ser data URI local'),
 });
-export const designElement = z.discriminatedUnion('type', [textElement, rectElement, ellipseElement, imageElement]);
+export const designElement = z.discriminatedUnion('type', [textElement, rectElement, ellipseElement, polygonElement, starElement, lineElement, imageElement]);
 export type DesignElement = z.infer<typeof designElement>;
 export type TextElement = z.infer<typeof textElement>;
 export type RectElement = z.infer<typeof rectElement>;

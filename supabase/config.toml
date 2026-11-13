@@ -1,0 +1,4 @@
+project_id = "kbezscxuhqculdvraqun"
+
+[functions.framecraft-api]
+verify_jwt = false

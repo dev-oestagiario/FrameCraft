@@ -116,8 +116,10 @@ export function repairAiDesign(raw:unknown, size:{width:number;height:number}, p
     let type=string(e.type).toLowerCase().trim();
     if(['rectangle','rounded-rectangle','roundedrect','square','box'].includes(type))type='rect';
     if(['circle','oval'].includes(type))type='ellipse';
+    if(['triangle','diamond','hexagon','pentagon'].includes(type))type='polygon';
+    if(['divider','rule','stroke'].includes(type))type='line';
     if(['label','heading','paragraph'].includes(type))type='text';
-    if(!['text','rect','ellipse'].includes(type)){
+    if(!['text','rect','ellipse','polygon','star','line'].includes(type)){
       repairs.push(`Elemento ${index+1}: tipo não suportado (${type||'ausente'}), ignorado.`);continue;
     }
     const originalColor=type==='text'?e.color??e.fill:e.fill??e.color;
@@ -140,10 +142,24 @@ export function repairAiDesign(raw:unknown, size:{width:number;height:number}, p
     } else if(type==='rect') {
       const rawStroke=e.stroke;
       elements.push({...base,type,fill:color,radius:clamp(e.radius??e.cornerRadius,20,0,300),
+        ...(e.fillEnd?{fillEnd:normalizeAiColor(e.fillEnd,color)}:{}),
         ...(rawStroke?{stroke:normalizeAiColor(rawStroke,foreground)}:{}),
         strokeWidth:clamp(e.strokeWidth,0,0,30)});
+    } else if(type==='ellipse') {
+      elements.push({...base,type,fill:color,
+        ...(e.fillEnd?{fillEnd:normalizeAiColor(e.fillEnd,color)}:{}),
+        ...(e.stroke?{stroke:normalizeAiColor(e.stroke,foreground)}:{}),
+        strokeWidth:clamp(e.strokeWidth,0,0,30)});
+    } else if(type==='polygon') {
+      elements.push({...base,type,fill:color,sides:clamp(e.sides,4,3,12),
+        ...(e.stroke?{stroke:normalizeAiColor(e.stroke,foreground)}:{}),
+        strokeWidth:clamp(e.strokeWidth,0,0,30)});
+    } else if(type==='star') {
+      elements.push({...base,type,fill:color,points:clamp(e.points,5,4,12),innerRatio:clamp(e.innerRatio,.46,.1,.85),
+        ...(e.stroke?{stroke:normalizeAiColor(e.stroke,foreground)}:{}),
+        strokeWidth:clamp(e.strokeWidth,0,0,30)});
     } else {
-      elements.push({...base,type,fill:color});
+      elements.push({...base,type,fill:color,strokeWidth:clamp(e.strokeWidth,5,1,30)});
     }
   }
   if(obj.elements.length>48)repairs.push('A composição foi limitada a 48 elementos.');

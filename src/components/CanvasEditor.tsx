@@ -1,5 +1,5 @@
 import {useCallback,useEffect,useRef,useState} from 'react';
-import {Stage,Layer,Rect,Text as KText,Ellipse,Image as KImage,Transformer} from 'react-konva';
+import {Stage,Layer,Rect,Text as KText,Ellipse,Line as KLine,Image as KImage,Transformer} from 'react-konva';
 import Konva from 'konva';
 import type {DesignElement, ImageElement, TextElement} from '../lib/schema';
 import {useStudio} from '../store/useStudio';
@@ -13,12 +13,21 @@ function useLoaded(src:string){const [image,setImage]=useState<HTMLImageElement|
 function ImageNode({element,common,register}:{element:ImageElement,common:Record<string,unknown>,register:(node:Konva.Node|null)=>void}){
  const img=useLoaded(element.src);return <KImage ref={register} {...common} image={img||undefined} width={element.width} height={element.height}/>;
 }
+function regularPoints(width:number,height:number,sides:number,innerRatio?:number):number[]{
+ const points:number[]=[];const n=innerRatio?sides*2:sides;
+ for(let i=0;i<n;i++){
+  const angle=-Math.PI/2+(Math.PI*2*i/n);
+  const ratio=innerRatio&&i%2===1?innerRatio:1;
+  points.push(width/2+Math.cos(angle)*width*.49*ratio,height/2+Math.sin(angle)*height*.49*ratio);
+ }
+ return points;
+}
 function textFontSize(el:TextElement){
  // Heuristic shrink: maintain a generous text box to avoid clipping at common sizes.
  const approxCharWidth=.53;let size=el.fontSize;
  for(let i=0;i<50;i++){
   const rows=el.content.split('\n').reduce((sum,line)=>sum+Math.max(1,Math.ceil(line.length*size*approxCharWidth/Math.max(el.width,1))),0);
-  if(rows*size*1.16<=el.height||size<=12)break;
+  if(rows*size*1.16<=el.height||size<=28)break;
   size-=1;
  }
  return size;
@@ -28,6 +37,12 @@ export function CanvasEditor({exportRef,zoom}:Props){
  const host=useRef<HTMLDivElement>(null);const stage=useRef<Konva.Stage>(null);const transformer=useRef<Konva.Transformer>(null);
  const nodes=useRef<Record<string,Konva.Node|null>>({});
  const [dimensions,setDimensions]=useState({width:800,height:760});
+ useEffect(()=>{
+  if(typeof document==='undefined'||!document.fonts)return;
+  let active=true;
+  void document.fonts.ready.then(()=>{if(active)stage.current?.getLayers().forEach(layer=>layer.batchDraw())});
+  return()=>{active=false};
+ },[]);
  useEffect(()=>{
   if(!host.current)return;const obs=new ResizeObserver(entries=>{
    const d=entries[0]?.contentRect;if(d)setDimensions({width:d.width,height:d.height});
@@ -60,9 +75,12 @@ export function CanvasEditor({exportRef,zoom}:Props){
       patchElement(el.id,{x:Math.round(el.type==='ellipse'?n.x()-w/2:n.x()),y:Math.round(el.type==='ellipse'?n.y()-h/2:n.y()),width:w,height:h,rotation:Math.round(n.rotation())});
     }
   };
-  if(el.type==='text')return <KText key={el.id} ref={register} {...common} width={el.width} height={el.height} text={el.content} fontSize={textFontSize(el)} fontFamily={el.fontFamily} fontStyle={el.fontWeight} fill={el.color} align={el.align} verticalAlign="middle" lineHeight={1.16} wrap="word" ellipsis={true}/>;
-  if(el.type==='rect')return <Rect key={el.id} ref={register} {...common} width={el.width} height={el.height} fill={el.fill} cornerRadius={el.radius} stroke={el.stroke} strokeWidth={el.strokeWidth}/>;
-  if(el.type==='ellipse')return <Ellipse key={el.id} ref={register} {...common} x={el.x+el.width/2} y={el.y+el.height/2} radiusX={el.width/2} radiusY={el.height/2} fill={el.fill}/>;
+  if(el.type==='text')return <KText key={el.id} ref={register} {...common} width={el.width} height={el.height} text={el.content} fontSize={textFontSize(el)} fontFamily={el.fontFamily==='Inter'?'Inter, Arial, sans-serif':el.fontFamily} fontStyle={el.fontWeight} fill={el.color} align={el.align} verticalAlign="middle" lineHeight={1.16} wrap="word" ellipsis={true}/>;
+  if(el.type==='rect')return <Rect key={el.id} ref={register} {...common} width={el.width} height={el.height} fill={el.fill} cornerRadius={el.radius} stroke={el.stroke} strokeWidth={el.strokeWidth} {...(el.fillEnd?{fillLinearGradientStartPoint:{x:0,y:0},fillLinearGradientEndPoint:{x:el.width,y:el.height},fillLinearGradientColorStops:[0,el.fill,1,el.fillEnd]}:{})}/>;
+  if(el.type==='ellipse')return <Ellipse key={el.id} ref={register} {...common} x={el.x+el.width/2} y={el.y+el.height/2} radiusX={el.width/2} radiusY={el.height/2} fill={el.fill} stroke={el.stroke} strokeWidth={el.strokeWidth} {...(el.fillEnd?{fillLinearGradientStartPoint:{x:-el.width/2,y:-el.height/2},fillLinearGradientEndPoint:{x:el.width/2,y:el.height/2},fillLinearGradientColorStops:[0,el.fill,1,el.fillEnd]}:{})}/>;
+  if(el.type==='polygon')return <KLine key={el.id} ref={register} {...common} points={regularPoints(el.width,el.height,el.sides)} closed fill={el.fill} stroke={el.stroke} strokeWidth={el.strokeWidth} lineJoin="round"/>;
+  if(el.type==='star')return <KLine key={el.id} ref={register} {...common} points={regularPoints(el.width,el.height,el.points,el.innerRatio)} closed fill={el.fill} stroke={el.stroke} strokeWidth={el.strokeWidth} lineJoin="round"/>;
+  if(el.type==='line')return <KLine key={el.id} ref={register} {...common} points={[0,0,el.width,el.height]} stroke={el.fill} strokeWidth={el.strokeWidth} lineCap="round" lineJoin="round"/>;
   return <ImageNode key={el.id} element={el} common={common} register={register}/>;
  };
  return <div className="canvas-host" ref={host}>
