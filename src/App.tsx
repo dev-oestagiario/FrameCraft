@@ -109,6 +109,8 @@ function GeneratePanel({onConfigureApi,onSignIn,session}:{onConfigureApi:()=>voi
  const [format,setFormat]=useState<GenerateRequest['format']>('portrait');
  const [renderMode,setRenderMode]=useState<'visual'|'vector'>('visual');
  const [uploadedHero,setUploadedHero]=useState<string|null>(null);
+ const [visualBlocked,setVisualBlocked]=useState(false);
+ const [visualCode,setVisualCode]=useState('');
  const heroFileInput=useRef<HTMLInputElement>(null);
  const [revision,setRevision]=useState('');
  const [showRevision,setShowRevision]=useState(false);
@@ -131,7 +133,7 @@ function GeneratePanel({onConfigureApi,onSignIn,session}:{onConfigureApi:()=>voi
 
  async function selectHero(file:File|undefined){
    if(!file)return;
-   try{const src=await readImage(file);setUploadedHero(src);setError(null)}
+   try{const src=await readImage(file);setUploadedHero(src);setError(null);setVisualCode('')}
    catch(error){setError(error instanceof Error?error.message:'Não foi possível abrir a imagem.')}
  }
  async function enhance(){
@@ -160,6 +162,7 @@ function GeneratePanel({onConfigureApi,onSignIn,session}:{onConfigureApi:()=>voi
    if(apiUnconfigured){setError('Conecte um backend HTTPS para usar a geração NVIDIA no GitHub Pages.');return}
    if(!session){onSignIn();return}
    if(prompt.trim().length<2){setError('Escreva pelo menos uma palavra sobre a arte desejada.');return}
+   if(renderMode==='visual'&&!uploadedHero&&visualBlocked){setError('A geração visual foi bloqueada após falha do provedor. Envie uma foto, use o modo vetorial ou escolha Tentar novamente.');return}
    setLoading(true);setError(null);setRepairMessages([]);
    try{
      const token=await auth.getToken();
@@ -173,8 +176,13 @@ function GeneratePanel({onConfigureApi,onSignIn,session}:{onConfigureApi:()=>voi
        headers:{'Content-Type':'application/json',Authorization:'Bearer '+token},
        body:JSON.stringify(request)});
      const response=await r.json() as {brief?:CreativeBrief,design?:Design,
-       hero?:{src?:string;model?:string},error?:string,model?:string,repairs?:string[]};
-     if(!r.ok||!response.brief)throw new Error(response.error||`HTTP ${r.status}: erro na geração`);
+       hero?:{src?:string;model?:string},error?:string,code?:string,model?:string,repairs?:string[],attempts?:string[]};
+     if(!r.ok){
+       setVisualCode(response.code||'');
+       if(endpoint==='generate-visual'&&['VISUAL_UNAUTHORIZED','VISUAL_FORBIDDEN','VISUAL_NOT_FOUND'].includes(response.code||''))setVisualBlocked(true);
+       throw new Error(response.error||`HTTP ${r.status}: erro na geração`);
+     }
+     if(!response.brief)throw new Error('O backend não retornou um briefing válido.');
      const source=originalPrompt||prompt;
      let result:Design;
      if(renderMode==='visual'){
@@ -187,10 +195,10 @@ function GeneratePanel({onConfigureApi,onSignIn,session}:{onConfigureApi:()=>voi
        result=designSchema.parse(response.design);
      }
      const validated=designSchema.parse(result);
-     setBrief(response.brief);setDesign(validated);
+     setBrief(response.brief);setDesign(validated);setVisualBlocked(false);setVisualCode('');
      setRepairMessages(Array.isArray(response.repairs)?response.repairs:[]);
      setShowRevision(false);setRevision('');
-   }catch(e){setError(e instanceof Error?e.message:'Falha na geração')}
+   }catch(e){setError(e instanceof Error?(e instanceof TypeError?'Não foi possível conectar ao backend Supabase. Verifique a rede e a conexão HTTPS.':e.message):'Falha na geração')}
    finally{setLoading(false)}
  }
  return <aside className="generate-panel">
@@ -205,7 +213,7 @@ function GeneratePanel({onConfigureApi,onSignIn,session}:{onConfigureApi:()=>voi
       <label className="fc-option"><span>Tipo de criação</span>
         <div className="select-wrap"><select aria-label="Tipo de criação" value={renderMode}
           onChange={e=>setRenderMode(e.target.value as 'visual'|'vector')}>
-          <option value="visual">Imagem profissional (IA)</option>
+          <option value="visual" disabled={visualBlocked&&!uploadedHero}>Imagem profissional (IA){visualBlocked&&!uploadedHero?' — indisponível':''}</option>
           <option value="vector">Somente vetor editável</option>
         </select><ChevronDown size={15}/></div>
       </label>
@@ -227,6 +235,14 @@ function GeneratePanel({onConfigureApi,onSignIn,session}:{onConfigureApi:()=>voi
     <button className="generate-btn" disabled={loading||enhancing} onClick={()=>void generate()}>{loading?<><span className="spinner"/> Criando a campanha...</>:<><Sparkles size={18}/> Gerar minha imagem <ArrowRight size={17}/></>}</button>
     {loading&&<p className="busy-caption">{renderMode==='visual'?'Gerando a imagem do produto e montando a campanha editável.':'Gerando a composição vetorial editável.'}</p>}
     {error&&<div className="error-box" role="alert"><CircleHelp size={17}/><span>{error}</span><button type="button" aria-label="Fechar erro" onClick={()=>setError(null)}><X size={16}/></button></div>}
+    {visualCode&&<div className="fc-visual-recovery" role="status">
+      <span>O gerador visual não conseguiu concluir. Você pode usar uma foto, continuar com vetor ou testar novamente.</span>
+      <div className="fc-recovery-actions">
+        <button type="button" onClick={()=>heroFileInput.current?.click()}><ImagePlus size={14}/> Enviar foto</button>
+        <button type="button" onClick={()=>{setRenderMode('vector');setError(null);setVisualCode('')}}>Usar vetor</button>
+        <button type="button" onClick={()=>{setVisualBlocked(false);setVisualCode('');setError(null);setRenderMode('visual')}}>Tentar novamente</button>
+      </div>
+    </div>}
     {repairMessages.length>0&&<details className="repair-notice"><summary><Check size={15}/> Design gerado com {repairMessages.length} ajuste(s) automático(s)</summary><ul>{repairMessages.slice(0,12).map((item,i)=><li key={i}>{item}</li>)}</ul></details>}
     {!connected&&<div className="fc-inline-alert" role="status"><CircleHelp size={15}/><span>{apiOffline?'O servidor de IA está indisponível.':apiUnconfigured?'Conecte o backend para gerar imagens.':'A NVIDIA não está configurada.'}</span><button type="button" onClick={onConfigureApi}>Configurar</button></div>}
     {(brief||session)&&<details className="fc-extra-settings"><summary>Ajustes avançados <ChevronDown size={14}/></summary>

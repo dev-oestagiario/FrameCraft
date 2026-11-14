@@ -439,3 +439,28 @@ html[data-framecraft-theme] .fc-auth-error{
 .app-shell .fc-hero-preview img{height:100%;width:100%;object-fit:cover;object-position:center}
 .app-shell .fc-hero-preview button{position:absolute;top:6px;right:6px;border:0;border-radius:7px;background:rgba(0,0,0,.75);color:#fff;width:27px;height:27px;display:flex;align-items:center;justify-content:center}
 @media(max-width:760px){.app-shell .fc-render-controls{gap:7px}.app-shell .fc-hero-upload{padding:10px}}
+
+/* NVIDIA visual provider diagnostics and recovery actions */
+.app-shell .fc-visual-recovery{
+  margin:12px 0 15px;border:1px solid var(--fc-border);
+  background:var(--fc-raised);border-radius:10px;padding:12px;
+  color:var(--fc-sub);font-size:12px;line-height:1.55;
+}
+.app-shell .fc-recovery-actions{display:flex;flex-wrap:wrap;gap:7px;margin-top:10px}
+.app-shell .fc-recovery-actions button{
+  min-height:33px;border:1px solid var(--fc-border);border-radius:7px;
+  display:inline-flex;align-items:center;justify-content:center;gap:6px;
+  color:var(--fc-text);background:var(--fc-surface);padding:7px 11px;
+  font-size:11px;font-weight:650;
+}
+.app-shell .fc-recovery-actions button:hover{background:var(--fc-hover)}
+.app-shell .fc-visual-test{
+  display:flex;flex-direction:column;gap:8px;
+  border-top:1px solid var(--fc-border);margin-top:16px;padding-top:15px;
+}
+.app-shell .fc-visual-test>button{min-height:37px}
+.app-shell .fc-visual-test p{font-size:11px;line-height:1.6;color:var(--fc-sub);margin:0}
+.app-shell .fc-visual-test p.fc-api-feedback{color:var(--fc-text);padding:9px;border-radius:8px}
+@media(max-width:760px){
+ .app-shell .fc-recovery-actions button{flex:1;min-width:105px}
+}
