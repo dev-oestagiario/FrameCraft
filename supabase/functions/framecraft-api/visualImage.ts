@@ -77,7 +77,8 @@ function imageFromPayload(payload:unknown,model:string){
  return 'data:'+mime+';base64,'+clean;
 }
 function preferredModels(){
- const custom=Deno.env.get('NVIDIA_IMAGE_MODEL')||'auto';
+ const runtime=globalThis as unknown as {Deno?:{env?:{get:(key:string)=>string|undefined}}};
+ const custom=runtime.Deno?.env?.get('NVIDIA_IMAGE_MODEL')||'auto';
  const preferred=MODELS.find(m=>m.id===custom);
  return preferred?[preferred,...MODELS.filter(m=>m.id!==custom)]:[...MODELS];
 }
