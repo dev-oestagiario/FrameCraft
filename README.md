@@ -292,3 +292,19 @@ Rota protegida por e-mail confirmado e controle de quota: `POST /api/generate-vi
 O segredo NVIDIA fica apenas na Edge Function. Consulte `.agents/skills/framecraft-visual-image-generation/SKILL.md`.
 
 Teste local: `npm run typecheck`, `npm test`, `npm run build`. O CI não testa uma geração real sem credenciais autorizadas; a disponibilidade da geração visual deverá ser verificada em uma conta autenticada.
+
+## Diagnóstico e fallback NVIDIA (correção de timeout)
+
+O endpoint de geração visual distingue falhas por códigos `VISUAL_TIMEOUT`, `VISUAL_NETWORK`, `VISUAL_UNAUTHORIZED`, `VISUAL_FORBIDDEN`, `VISUAL_NOT_FOUND`, `VISUAL_RATE_LIMIT`, `VISUAL_INVALID_REQUEST`, `VISUAL_UPSTREAM` e `VISUAL_INVALID_RESPONSE`. Nenhum segredo é retornado ao navegador.
+
+Modelos de imagem consultados nesta ordem (ambos documentados pela NVIDIA):
+1. `black-forest-labs/flux.2-klein-4b` (rápido; `mode: "Image Generation"`).
+2. `black-forest-labs/flux.1-schnell` (`mode: "base"`).
+
+Não repetir uma solicitação que possa ter sido faturada; a tentativa alternativa usa outro modelo apenas uma vez quando o primeiro não produziu imagem. Timeout por modelo limitado para impedir que o sistema fique preso em 95 segundos em cada tentativa. Se os dois falharem, retorna erro estruturado sem inventar imagem ou fazer fallback para círculos.
+
+A rota `GET /api/visual-health` exige sessão Supabase, faz **HEAD não-generativo** e guarda o resultado por 60 segundos por usuário no worker. Resposta de HEAD pode comprovar conectividade, **nunca comprova acesso à inferência**, que apenas uma geração real valida. O botão **Conexão → Diagnosticar gerador de imagens** exibe o resultado; não exige token privado no browser.
+
+Após falha, o editor oferece **Enviar foto**, **Usar vetor** ou **Tentar novamente**. Se a API rejeitar a chave/acesso a ambos os modelos, a opção visual fica desabilitada até ação explícita do usuário; não muda automaticamente para vetor.
+
+As credenciais NVIDIA permanecem exclusivamente no projeto Supabase `dtvbphnoqkbxlwdiivvv`. A execução real ainda depende da disponibilidade e da permissão da conta NVIDIA. Testes simulados não devem ser apresentados como inferência real validada.

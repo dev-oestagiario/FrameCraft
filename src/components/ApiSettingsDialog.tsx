@@ -1,12 +1,15 @@
 import {useEffect,useState} from 'react';
 import {ArrowRight,CheckCircle2,Cloud,ExternalLink,Link2,ShieldCheck,X} from 'lucide-react';
 import {apiUrl,getApiOrigin,normalizeApiOrigin,saveApiOrigin} from '../lib/apiConnection';
+import {auth} from '../lib/auth';
 
 type Props={onClose:()=>void};
 export function ApiSettingsDialog({onClose}:Props){
  const[value,setValue]=useState(getApiOrigin);
  const[status,setStatus]=useState('');
  const[testing,setTesting]=useState(false);
+ const[visualTesting,setVisualTesting]=useState(false);
+ const[visualStatus,setVisualStatus]=useState('');
  useEffect(()=>{
   const key=(e:KeyboardEvent)=>{if(e.key==='Escape')onClose()};
   document.addEventListener('keydown',key);
@@ -28,6 +31,21 @@ export function ApiSettingsDialog({onClose}:Props){
   }catch(e){setStatus(e instanceof Error?e.message:'Falha na conexão HTTPS.')}
   finally{setTesting(false)}
  }
+ async function checkVisual(){
+  setVisualTesting(true);setVisualStatus('');
+  try{
+   const token=await auth.getToken();
+   if(!token){setVisualStatus('Entre com seu e-mail antes de verificar os modelos de imagem.');return}
+   const origin=normalizeApiOrigin(value);
+   const r=await fetch(apiUrl('visual-health',origin),{headers:{Authorization:'Bearer '+token},signal:AbortSignal.timeout(12000)});
+   const result=await r.json() as {configured?:boolean;status?:string;model?:string;providerHttpStatus?:number;message?:string;error?:string};
+   if(!r.ok)throw new Error(result.error||'O backend não conseguiu verificar o provedor.');
+   const detail=result.providerHttpStatus?' (HTTP '+result.providerHttpStatus+')':'';
+   setVisualStatus((result.message||'Diagnóstico indisponível.')+detail+' Modelo: '+(result.model||'não definido')+'.');
+  }catch(error){
+   setVisualStatus(error instanceof Error?error.message:'Não foi possível verificar a NVIDIA.');
+  }finally{setVisualTesting(false)}
+ }
  function save(){
   try{saveApiOrigin(value);onClose()}catch(e){setStatus(e instanceof Error?e.message:'URL inválida')}
  }
@@ -40,6 +58,11 @@ export function ApiSettingsDialog({onClose}:Props){
    <p className="fc-api-hint">O endereço do Supabase Dev é preenchido automaticamente. Apenas modifique se utilizar outro backend.</p>
    {status&&<p className="fc-api-feedback" role="status">{status}</p>}
    <div className="fc-api-actions"><button className="fc-outline-btn" onClick={()=>void test()} disabled={testing}>{testing?'Verificando...':'Testar conexão'}</button><button className="fc-primary-btn" onClick={save}><CheckCircle2 size={16}/> Salvar endereço</button></div>
+   <div className="fc-visual-test">
+     <button type="button" className="fc-outline-btn" onClick={()=>void checkVisual()} disabled={visualTesting}>{visualTesting?'Verificando NVIDIA...':'Diagnosticar gerador de imagens'}</button>
+     <p>Este teste verifica a conectividade com o serviço sem gerar imagem nem consumir uma inferência. A permissão do modelo só é confirmada durante uma geração.</p>
+     {visualStatus&&<p className="fc-api-feedback" role="status">{visualStatus}</p>}
+   </div>
    <div className="fc-api-note"><ShieldCheck size={17}/><span>O Supabase verifica a sessão do usuário e aplica limites de utilização. A chave NVIDIA permanece somente nos secrets.</span></div>
    <a className="fc-api-doc-link" href="https://github.com/dev-oestagiario/FrameCraft#publicar-no-github-pages" target="_blank" rel="noopener noreferrer">Documentação do projeto <ExternalLink size={14}/><ArrowRight size={15}/></a>
   </section>

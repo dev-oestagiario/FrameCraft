@@ -16,3 +16,12 @@ description: Criação de campanhas profissionais com imagens raster, referênci
 10. Suporte a foto do usuário fica local no navegador; somente textos e briefings vão para a API nesse modo. Nunca exponha NVIDIA_API_KEY.
 11. Em caso de erro do provedor de imagem, exponha a mensagem e ofereça usar foto enviada ou modo vetorial. **Não** alegue geração visual premium ao voltar para formas simples.
 12. O compositor híbrido é src/lib/premiumCampaign.ts, usado pelo frontend. A integração de pixels fica em supabase/functions/framecraft-api/visualImage.ts.
+
+## Diagnóstico de infraestrutura visual
+
+- Não engula exceções do `fetch`. Preserve categoria (timeout/rede), modelo tentado e HTTP recebido, sem mostrar credenciais ou prompt no log.
+- Use `probeVisualService` por HEAD apenas para testar conectividade e marque status `unverified`. Não afirmar que HTTP 405 no HEAD valida acesso à inferência.
+- Roteamento rápido: FLUX.2 klein 4B primeiro; FLUX.1 Schnell segundo, com timeouts individuais e sem repetição do mesmo modelo.
+- Em 401 pare imediatamente; em 429 evite consumir novas chamadas; em 403/404/422 e 5xx tente apenas o modelo alternativo uma vez.
+- UI deve oferecer foto local, vetor explícito e retry; não converter erro de modelo visual em composição geométrica sem consentimento.
+- Valide códigos do backend e a rota autenticada `/api/visual-health`; confirme diferenças entre testes simulados e inferência real.

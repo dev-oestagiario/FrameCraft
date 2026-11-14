@@ -5,7 +5,7 @@
  */
 import {auditProfessionalDesign,composeProfessionalDesign,type PosterBrief,type PosterStyle,type PosterFormat} from './proComposer.ts';
 import {extractArtIntent,enforceSubjectFidelity} from './subjectFidelity.ts';
-import {generateNvidiaHero,VISUAL_MODEL} from './visualImage.ts';
+import {generateNvidiaHero,probeVisualService,VISUAL_MODEL,VISUAL_MODELS,VisualProviderError} from './visualImage.ts';
 
 const ALLOWED_ORIGINS=new Set([
  'https://dev-oestagiario.github.io','http://localhost:5173','http://127.0.0.1:5173'
@@ -26,6 +26,7 @@ const json=(body:unknown,status=200,origin?:string|null)=>{
  return new Response(JSON.stringify(body),{status,headers});
 };
 const SB_URL=Deno.env.get('SUPABASE_URL')||'https://dtvbphnoqkbxlwdiivvv.supabase.co';
+const visualProbes=new Map<string,{at:number,result:Awaited<ReturnType<typeof probeVisualService>>}>();
 const ANON_KEY=Deno.env.get('SUPABASE_ANON_KEY')||'';
 const SERVICE_KEY=Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')||'';
 async function authenticatedUser(req:Request):Promise<string|null>{
@@ -171,7 +172,18 @@ Deno.serve(async(req:Request)=>{
  if(req.method==='GET'&&path.endsWith('/api/health'))
   return json({status:'ok',configured:Boolean(key),auth:'supabase-email'},200,origin);
  if(req.method==='GET'&&path.endsWith('/api/models'))
-  return json({configured:Boolean(key),requiresAuth:true,selected:null,catalogAccessible:false,visualModel:VISUAL_MODEL,visualAvailability:'not_verified'},200,origin);
+  return json({configured:Boolean(key),requiresAuth:true,selected:null,catalogAccessible:false,visualModel:VISUAL_MODEL,visualModels:VISUAL_MODELS,visualAvailability:'unverified'},200,origin);
+ if(req.method==='GET'&&path.endsWith('/api/visual-health')){
+  const uid=await authenticatedUser(req);
+  if(!uid)return json({error:'Entre com seu e-mail para verificar a NVIDIA.'},401,origin);
+  if(!key)return json({configured:false,status:'unconfigured',message:'NVIDIA_API_KEY não configurada.',models:VISUAL_MODELS},200,origin);
+  const now=Date.now(),cached=visualProbes.get(uid);
+  if(cached&&now-cached.at<60_000)return json({...cached.result,models:VISUAL_MODELS,fromCache:true},200,origin);
+  const result=await probeVisualService(key);
+  if(visualProbes.size>250)visualProbes.clear();
+  visualProbes.set(uid,{at:now,result});
+  return json({...result,models:VISUAL_MODELS},200,origin);
+ }
  if(req.method!=='POST'||!(path.endsWith('/api/enhance')||path.endsWith('/api/generate')||path.endsWith('/api/generate-visual')))
   return json({error:'Rota não encontrada.'},404,origin);
  const action=path.endsWith('/api/enhance')?'enhance':'generate';
@@ -203,7 +215,11 @@ Deno.serve(async(req:Request)=>{
    repairs:issues.length?['Direção de arte revisada: '+issues.slice(0,3).join(' | ')]:[]},200,origin);
  }catch(error){
   const message=error instanceof Error?error.message:'Falha da geração.';
-  console.error('FrameCraft:',message);
-  return json({error:message},/cota|limite/.test(message.toLowerCase())?429:502,origin);
+  if(error instanceof VisualProviderError){
+   console.error('[FrameCraft visual]',error.code,error.model,error.attempts.join(',')); // never log API key or prompt
+   return json({error:message,code:error.code,model:error.model,attempts:error.attempts},error.httpStatus,origin);
+  }
+  console.error('[FrameCraft]',message);
+  return json({error:message,code:'GENERATION_FAILED'},/cota|limite/.test(message.toLowerCase())?429:502,origin);
  }
 });
